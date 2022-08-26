@@ -245,6 +245,14 @@
                                             <action selector="buttonHeightTextChanged:" destination="G9F-Ly-Aci" eventType="editingDidEnd" id="Ulo-fV-ahZ"/>
                                         </connections>
                                     </textField>
+                                    <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="EPx-LR-z5G">
+                                        <rect key="frame" x="281" y="-10" width="101" height="31"/>
+                                        <state key="normal" title="Button"/>
+                                        <buttonConfiguration key="configuration" style="plain" title="background"/>
+                                        <connections>
+                                            <segue destination="zE9-un-ZRO" kind="presentation" id="RnD-d5-bO0"/>
+                                        </connections>
+                                    </button>
                                 </subviews>
                                 <constraints>
                                     <constraint firstItem="xIz-TT-guM" firstAttribute="leading" secondItem="wwA-fD-rtw" secondAttribute="trailing" constant="15" id="0Nz-bF-mvd"/>
@@ -314,7 +322,7 @@
                                 <viewLayoutGuide key="contentLayoutGuide" id="9Hv-VY-ZcC"/>
                                 <viewLayoutGuide key="frameLayoutGuide" id="TKW-cs-QtY"/>
                             </scrollView>
-                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Lke-JD-EvP" customClass="SystemButton" customModule="ConfigurationBasedButton_Example" customModuleProvider="target">
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Lke-JD-EvP">
                                 <rect key="frame" x="75" y="652" width="240" height="128"/>
                                 <color key="backgroundColor" red="0.84623735510112441" green="1" blue="0.95446142912459364" alpha="0.84705882352941175" colorSpace="custom" customColorSpace="sRGB"/>
                                 <constraints>
@@ -334,8 +342,10 @@
                             <constraint firstItem="rTq-hz-IHU" firstAttribute="height" secondItem="eE7-GE-sYp" secondAttribute="height" multiplier="0.5" id="3Ol-oI-oee"/>
                             <constraint firstItem="rTq-hz-IHU" firstAttribute="top" secondItem="eac-5M-fYV" secondAttribute="top" id="D2C-Bk-DMY"/>
                             <constraint firstItem="AGk-y2-XRh" firstAttribute="top" secondItem="rTq-hz-IHU" secondAttribute="bottom" constant="49" id="HaH-Jk-fEq"/>
+                            <constraint firstItem="eac-5M-fYV" firstAttribute="trailing" secondItem="EPx-LR-z5G" secondAttribute="trailing" constant="8" id="K7J-cx-h2e"/>
                             <constraint firstItem="Lke-JD-EvP" firstAttribute="centerX" secondItem="eac-5M-fYV" secondAttribute="centerX" id="K82-zE-gKm"/>
                             <constraint firstItem="eac-5M-fYV" firstAttribute="bottom" secondItem="Lke-JD-EvP" secondAttribute="bottom" constant="30" id="Lqj-g6-sSv"/>
+                            <constraint firstItem="eac-5M-fYV" firstAttribute="top" secondItem="EPx-LR-z5G" secondAttribute="top" constant="10" id="TWU-QU-aIY"/>
                             <constraint firstItem="rTq-hz-IHU" firstAttribute="leading" secondItem="eac-5M-fYV" secondAttribute="leading" id="XxV-sV-zpy"/>
                             <constraint firstItem="AGk-y2-XRh" firstAttribute="centerX" secondItem="eac-5M-fYV" secondAttribute="centerX" id="YwT-tC-pZ0"/>
                             <constraint firstItem="eac-5M-fYV" firstAttribute="trailing" secondItem="rTq-hz-IHU" secondAttribute="trailing" id="yTS-WN-c9e"/>
@@ -352,7 +362,49 @@
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="eMU-cl-I2F" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="-13.043478260869566" y="-717.1875"/>
+            <point key="canvasLocation" x="320" y="-711"/>
+        </scene>
+        <!--Background View Controller-->
+        <scene sceneID="JDQ-Rv-E5l">
+            <objects>
+                <viewController id="zE9-un-ZRO" customClass="BackgroundViewController" customModule="ConfigurationBasedButton_Example" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="QjH-0z-TYW">
+                        <rect key="frame" x="0.0" y="0.0" width="390" height="790"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="ZED-om-XgO">
+                                <rect key="frame" x="95" y="367" width="200" height="100"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="200" id="FiD-66-XBF"/>
+                                    <constraint firstAttribute="width" secondItem="ZED-om-XgO" secondAttribute="height" multiplier="2:1" id="M8b-SE-hpM"/>
+                                </constraints>
+                                <state key="normal" title="Button"/>
+                                <buttonConfiguration key="configuration" style="plain" title=""/>
+                            </button>
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="QGd-jN-dxX" customClass="BackgroundView" customModule="ConfigurationBasedButton">
+                                <rect key="frame" x="95" y="521" width="200" height="100"/>
+                                <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                            </view>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="fJy-fH-KrE"/>
+                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <constraints>
+                            <constraint firstItem="QGd-jN-dxX" firstAttribute="top" secondItem="ZED-om-XgO" secondAttribute="bottom" constant="54" id="4tF-ZM-IiA"/>
+                            <constraint firstItem="QGd-jN-dxX" firstAttribute="height" secondItem="ZED-om-XgO" secondAttribute="height" id="9vn-wr-y3I"/>
+                            <constraint firstItem="QGd-jN-dxX" firstAttribute="width" secondItem="ZED-om-XgO" secondAttribute="width" id="CBN-fp-3EG"/>
+                            <constraint firstItem="QGd-jN-dxX" firstAttribute="centerX" secondItem="fJy-fH-KrE" secondAttribute="centerX" id="gw6-VM-JA0"/>
+                            <constraint firstItem="ZED-om-XgO" firstAttribute="centerX" secondItem="fJy-fH-KrE" secondAttribute="centerX" id="iS4-yi-TuW"/>
+                            <constraint firstItem="ZED-om-XgO" firstAttribute="centerY" secondItem="fJy-fH-KrE" secondAttribute="centerY" id="rPb-m2-rOZ"/>
+                        </constraints>
+                    </view>
+                    <connections>
+                        <outlet property="backgroundView" destination="QGd-jN-dxX" id="TTC-OQ-lxJ"/>
+                        <outlet property="button" destination="ZED-om-XgO" id="gSy-3k-zTu"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="tJn-2S-uC5" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="-551" y="-1395"/>
         </scene>
     </scenes>
     <resources>

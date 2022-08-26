@@ -7,35 +7,8 @@
 
 import UIKit
 
-
-public class SystemButton: UIButton {
-    public override var intrinsicContentSize: CGSize {
-        let size = super.intrinsicContentSize
-        return size
-    }
-
-    public override func systemLayoutSizeFitting(_ targetSize: CGSize) -> CGSize {
-        let size = super.systemLayoutSizeFitting(targetSize)
-        return size
-    }
-    
-    public override func systemLayoutSizeFitting(_ targetSize: CGSize, withHorizontalFittingPriority horizontalFittingPriority: UILayoutPriority, verticalFittingPriority: UILayoutPriority) -> CGSize {
-        let size = super.systemLayoutSizeFitting(targetSize, withHorizontalFittingPriority: horizontalFittingPriority, verticalFittingPriority: verticalFittingPriority)
-        return size
-    }
-    
-    public override func invalidateIntrinsicContentSize() {
-        super.invalidateIntrinsicContentSize()
-    }
-    
-    public override func sizeThatFits(_ size: CGSize) -> CGSize {
-        let result = super.sizeThatFits(size)
-        return result
-    }
-    
-    public override func setNeedsUpdateConstraints() {
-        super.setNeedsUpdateConstraints()
-    }
+public enum EdgeInsets: Equatable {
+    case directional(NSDirectionalEdgeInsets), nondirectional(UIEdgeInsets)
 }
 
 public struct ButtonConfiguration: Equatable {
@@ -49,56 +22,25 @@ public struct ButtonConfiguration: Equatable {
         case leading, center, trailing, left, right
     }
     
-    public enum CornerStyle: Equatable {
-        case fixed, capsule
-    }
-    
-    public enum ContentInsets: Equatable {
-        case directional(NSDirectionalEdgeInsets), nondirectional(UIEdgeInsets)
-    }
-    
     public var image: UIImage?
     public var title: String?
     public var subtitle: String?
     
     public var imagePlacement: ButtonConfiguration.ImagePlacement = .leading
     public var titleAlignment: ButtonConfiguration.TitleAlignment = .automatic
-    public var cornerStyle: CornerStyle = .fixed
     
-    public var contentInsets: ContentInsets = .directional(.zero)
+    public var contentInsets: EdgeInsets = .directional(.zero)
     public var imagePadding: CGFloat = 0
     public var titlePadding: CGFloat = 0
     
 //    var showsActivityIndicator: Bool = false
+    public var background: BackgroundConfiguration?
 
     public init() {
     }
 }
 
 public class ConfigurationBasedButton: UIControl {
-    
-    private lazy var imageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.backgroundColor = .lightGray
-        imageView.contentMode = .scaleAspectFit
-        return imageView
-    }()
-    
-    private lazy var titleLabel: UILabel = {
-        let titleLabel = UILabel()
-        titleLabel.font = .preferredFont(forTextStyle: .headline)
-        titleLabel.backgroundColor = .lightGray
-        titleLabel.numberOfLines = 0
-        return titleLabel
-    }()
-    
-    private lazy var subtitleLabel: UILabel = {
-        let subtitleLabel = UILabel()
-        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
-        subtitleLabel.backgroundColor = .lightGray
-        subtitleLabel.numberOfLines = 0
-        return subtitleLabel
-    }()
         
     public var configuration: ButtonConfiguration {
         didSet {
@@ -186,6 +128,29 @@ public class ConfigurationBasedButton: UIControl {
         }
     }
     
+    private lazy var imageView: UIImageView = {
+        let imageView = UIImageView()
+        imageView.backgroundColor = .lightGray
+        imageView.contentMode = .scaleAspectFit
+        return imageView
+    }()
+    
+    private lazy var titleLabel: UILabel = {
+        let titleLabel = UILabel()
+        titleLabel.font = .preferredFont(forTextStyle: .headline)
+        titleLabel.backgroundColor = .lightGray
+        titleLabel.numberOfLines = 0
+        return titleLabel
+    }()
+    
+    private lazy var subtitleLabel: UILabel = {
+        let subtitleLabel = UILabel()
+        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
+        subtitleLabel.backgroundColor = .lightGray
+        subtitleLabel.numberOfLines = 0
+        return subtitleLabel
+    }()
+    
     private var isRTL: Bool {
         effectiveUserInterfaceLayoutDirection == .rightToLeft
     }
@@ -216,8 +181,8 @@ public class ConfigurationBasedButton: UIControl {
         default: break
         }
         
-        if let image = configuration.image {
-            imageView.image = image
+        if isDisplayingImage {
+            imageView.image = configuration.image
             if !imageView.isDescendant(of: self) {
                 addSubview(imageView)
             }
@@ -226,8 +191,8 @@ public class ConfigurationBasedButton: UIControl {
             imageView.removeFromSuperview()
         }
         
-        if let title = configuration.title, !title.isEmpty {
-            titleLabel.text = title
+        if isDisplayingTitle {
+            titleLabel.text = configuration.title
             titleLabel.textAlignment = textAlignment
             
             if !titleLabel.isDescendant(of: self) {
@@ -238,8 +203,8 @@ public class ConfigurationBasedButton: UIControl {
             titleLabel.removeFromSuperview()
         }
         
-        if let subtitle = configuration.subtitle, !subtitle.isEmpty  {
-            subtitleLabel.text = subtitle
+        if isDisplayingSubtitle  {
+            subtitleLabel.text = configuration.subtitle
             subtitleLabel.textAlignment = textAlignment
 
             if !subtitleLabel.isDescendant(of: self) {
@@ -251,9 +216,6 @@ public class ConfigurationBasedButton: UIControl {
         }
         
         invalidateIntrinsicContentSize()
-        
-//        let size = systemLayoutSizeFitting(UIView.layoutFittingExpandedSize)
-
         
         setNeedsLayout()
         layoutIfNeeded()
