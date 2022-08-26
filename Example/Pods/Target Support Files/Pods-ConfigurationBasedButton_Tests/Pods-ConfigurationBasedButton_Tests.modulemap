@@ -1,0 +1,6 @@
+framework module Pods_ConfigurationBasedButton_Tests {
+  umbrella header "Pods-ConfigurationBasedButton_Tests-umbrella.h"
+
+  export *
+  module * { export * }
+}

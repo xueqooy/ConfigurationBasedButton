@@ -1,0 +1,27 @@
+PODS:
+  - ConfigurationBasedButton (0.1.0)
+  - FBSnapshotTestCase (2.1.4):
+    - FBSnapshotTestCase/SwiftSupport (= 2.1.4)
+  - FBSnapshotTestCase/Core (2.1.4)
+  - FBSnapshotTestCase/SwiftSupport (2.1.4):
+    - FBSnapshotTestCase/Core
+
+DEPENDENCIES:
+  - ConfigurationBasedButton (from `../`)
+  - FBSnapshotTestCase (~> 2.1.4)
+
+SPEC REPOS:
+  trunk:
+    - FBSnapshotTestCase
+
+EXTERNAL SOURCES:
+  ConfigurationBasedButton:
+    :path: "../"
+
+SPEC CHECKSUMS:
+  ConfigurationBasedButton: 654e7239a3b95ed7aec583150fabb2893782eaf7
+  FBSnapshotTestCase: 094f9f314decbabe373b87cc339bea235a63e07a
+
+PODFILE CHECKSUM: 685700db087ca15f8bf5c7a21f484d187f45c9ae
+
+COCOAPODS: 1.11.3

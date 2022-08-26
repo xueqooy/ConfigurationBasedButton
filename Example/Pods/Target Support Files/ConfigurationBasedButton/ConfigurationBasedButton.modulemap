@@ -1,0 +1,6 @@
+framework module ConfigurationBasedButton {
+  umbrella header "ConfigurationBasedButton-umbrella.h"
+
+  export *
+  module * { export * }
+}

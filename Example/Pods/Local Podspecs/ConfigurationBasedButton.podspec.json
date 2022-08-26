@@ -1,0 +1,24 @@
+{
+  "name": "ConfigurationBasedButton",
+  "version": "0.1.0",
+  "summary": "A short description of ConfigurationBasedButton.",
+  "swift_versions": "5.0",
+  "description": "TODO: Add long description of the pod here.",
+  "homepage": "https://github.com/xue-nd/ConfigurationBasedButton",
+  "license": {
+    "type": "MIT",
+    "file": "LICENSE"
+  },
+  "authors": {
+    "xue-nd": "xuejianhui@nd.com.cn"
+  },
+  "source": {
+    "git": "https://github.com/xue-nd/ConfigurationBasedButton.git",
+    "tag": "0.1.0"
+  },
+  "platforms": {
+    "ios": "11.0"
+  },
+  "source_files": "ConfigurationBasedButton/Classes/**/*",
+  "swift_version": "5.0"
+}
