@@ -65,7 +65,12 @@ public class BackgroundView: UIView {
         return strokeView
     }()
     
-    private var isDisplayingColorView: Bool {
+    private var didAddColorView: Bool = false
+    private var didAddVisualEffectView: Bool = false
+    private var didAddStrokeView: Bool = false
+    private var didAddImageView: Bool = false
+    
+    private var shouldDisplayColorView: Bool {
         if configuration.visualEffect != nil {
             return false
         } else {
@@ -73,19 +78,19 @@ public class BackgroundView: UIView {
         }
     }
         
-    private var isDisplayingVisualEffectView: Bool {
+    private var shouldDisplayVisualEffectView: Bool {
         configuration.visualEffect != nil
     }
     
-    private var isDisplayingStrokeView: Bool {
+    private var shouldDisplayStrokeView: Bool {
         configuration.strokeColor != nil && configuration.strokeWidth > 0
     }
     
-    private var isDisplayingImageView: Bool {
+    private var shouldDisplayImageView: Bool {
         configuration.image != nil
     }
     
-    private var isDisplayingCustomView: Bool {
+    private var shouldDisplayCustomView: Bool {
         configuration.customView != nil
     }
     
@@ -114,42 +119,51 @@ public class BackgroundView: UIView {
     }
     
     public func update() {
-        if isDisplayingColorView {
+        if shouldDisplayColorView {
             colorView.backgroundColor = configuration.fillColor
             
             if !colorView.isDescendant(of: self) {
                 addSubview(colorView)
+                didAddColorView = true
             }
-        } else {
+            sendSubviewToBack(colorView)
+        } else if didAddColorView {
             colorView.removeFromSuperview()
+            didAddColorView = false
         }
         
-        if isDisplayingVisualEffectView {
+        if shouldDisplayVisualEffectView {
             visualEffectView.contentView.backgroundColor = configuration.fillColor
             visualEffectView.effect = configuration.visualEffect
             
             if !visualEffectView.isDescendant(of: self) {
                 addSubview(visualEffectView)
+                didAddVisualEffectView = true
             }
             bringSubviewToFront(visualEffectView)
-        } else {
+        } else if didAddVisualEffectView {
             visualEffectView.removeFromSuperview()
+            didAddVisualEffectView = false
         }
         
-        if isDisplayingImageView {
+        if shouldDisplayImageView {
             imageView.contentMode = configuration.imageContentMode
             imageView.image = configuration.image
+           
             if !imageView.isDescendant(of: self) {
                 addSubview(imageView)
+                didAddImageView = true
             }
             bringSubviewToFront(imageView)
-        } else {
+        } else if didAddImageView {
             imageView.removeFromSuperview()
+            didAddImageView = false
         }
         
-        if isDisplayingCustomView {
+        if shouldDisplayCustomView {
             customView = configuration.customView
             configuration.customView?.clipsToBounds = true
+          
             if let customView = customView {
                 if !customView.isDescendant(of: self) {
                     addSubview(customView)
@@ -161,27 +175,25 @@ public class BackgroundView: UIView {
             customView = nil
         }
         
-        if isDisplayingStrokeView {
+        if shouldDisplayStrokeView {
             strokeView.layer.borderColor = configuration.strokeColor?.cgColor
             strokeView.layer.borderWidth = configuration.strokeWidth
             
             if !strokeView.isDescendant(of: self) {
                 addSubview(strokeView)
+                didAddStrokeView = true
             }
             bringSubviewToFront(strokeView)
-        } else {
+        } else if didAddStrokeView {
             strokeView.removeFromSuperview()
+            didAddStrokeView = false
         }
         
     }
     
     public override func layoutSubviews() {
         super.layoutSubviews()
-        
-        let isDisplayingColorView = self.isDisplayingColorView
-        let isDisplayingVisualEffectView = self.isDisplayingVisualEffectView
-        let isDisplayingStrokeView = self.isDisplayingStrokeView
-  
+    
         var cornerRadius: CGFloat = 0
         if let cornerStyle = configuration.cornerStyle {
             switch cornerStyle {
@@ -192,27 +204,27 @@ public class BackgroundView: UIView {
             }
         }
         
-        if isDisplayingColorView {
+        if shouldDisplayColorView {
             colorView.frame = bounds
             colorView.layer.cornerRadius = cornerRadius
         }
         
-        if isDisplayingVisualEffectView {
+        if shouldDisplayVisualEffectView {
             visualEffectView.frame = bounds
             visualEffectView.subviews.forEach { $0.layer.cornerRadius = cornerRadius }
         }
         
-        if isDisplayingImageView {
+        if shouldDisplayStrokeView {
             imageView.frame = bounds
             imageView.layer.cornerRadius = cornerRadius
         }
         
-        if isDisplayingCustomView {
+        if shouldDisplayCustomView {
             customView?.frame = bounds
             customView?.layer.cornerRadius = cornerRadius
         }
         
-        if isDisplayingStrokeView {
+        if shouldDisplayStrokeView {
             let outset = configuration.strokeOutset
             strokeView.frame = bounds.inset(by: UIEdgeInsets(top: -outset, left: -outset, bottom: -outset, right: -outset))
             if cornerRadius > 0 {

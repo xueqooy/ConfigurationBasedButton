@@ -68,15 +68,19 @@ public class ConfigurationBasedButton: UIControl {
         }
     }
     
-    public var isDisplayingImage: Bool {
+    public var shouldDisplayBackground: Bool {
+        configuration.background != nil
+    }
+    
+    public var shouldDisplayImage: Bool {
        configuration.image != nil
     }
     
-    public var isDisplayingTitle: Bool {
+    public var shouldDisplayTitle: Bool {
         !(configuration.title ?? "").isEmpty
     }
     
-    public var isDisplayingSubtitle: Bool {
+    public var shouldDisplaySubtitle: Bool {
         !(configuration.subtitle ?? "").isEmpty
     }
     
@@ -98,7 +102,7 @@ public class ConfigurationBasedButton: UIControl {
         case .trailing:
             return isRTL ? .left : .right
         case .automatic:
-            if isDisplayingImage {
+            if shouldDisplayImage {
                 switch configuration.imagePlacement {
                 case .leading:
                     return isRTL ? .right : .left
@@ -128,6 +132,16 @@ public class ConfigurationBasedButton: UIControl {
         }
     }
     
+    private var didAddBackgroundView = false
+    private var didAddImageView = false
+    private var didAddTitleView = false
+    private var didAddSubtitleView = false
+    
+    private lazy var backgroundView: BackgroundView = {
+        let backgroundView = BackgroundView()
+        return backgroundView
+    }()
+    
     private lazy var imageView: UIImageView = {
         let imageView = UIImageView()
         imageView.backgroundColor = .lightGray
@@ -155,6 +169,8 @@ public class ConfigurationBasedButton: UIControl {
         effectiveUserInterfaceLayoutDirection == .rightToLeft
     }
     
+    private var validFitSize: CGSize?
+    
     public init(configuration: ButtonConfiguration = ButtonConfiguration()) {
         self.configuration = configuration
         super.init(frame: .zero)
@@ -170,6 +186,19 @@ public class ConfigurationBasedButton: UIControl {
     }
     
     private func update() {
+        if shouldDisplayBackground {
+            backgroundView.configuration = configuration.background ?? BackgroundConfiguration()
+          
+            if !backgroundView.isDescendant(of: self) {
+                addSubview(backgroundView)
+                didAddBackgroundView = true
+            }
+            sendSubviewToBack(backgroundView)
+        } else if didAddBackgroundView {
+            backgroundView.removeFromSuperview()
+            didAddBackgroundView = false
+        }
+        
         var textAlignment: NSTextAlignment = .natural
         switch effectiveTitleAlignment {
         case .left:
@@ -181,48 +210,56 @@ public class ConfigurationBasedButton: UIControl {
         default: break
         }
         
-        if isDisplayingImage {
+        if shouldDisplayImage {
             imageView.image = configuration.image
+           
             if !imageView.isDescendant(of: self) {
                 addSubview(imageView)
+                didAddImageView = true
             }
-        } else {
+        } else if didAddImageView {
             imageView.image = nil
             imageView.removeFromSuperview()
+            didAddImageView = false
         }
         
-        if isDisplayingTitle {
+        if shouldDisplayTitle {
             titleLabel.text = configuration.title
             titleLabel.textAlignment = textAlignment
-            
+          
             if !titleLabel.isDescendant(of: self) {
                 addSubview(titleLabel)
+                didAddTitleView = true
             }
-        } else {
+        } else if didAddTitleView {
             titleLabel.text = nil
             titleLabel.removeFromSuperview()
+            didAddTitleView = false
         }
         
-        if isDisplayingSubtitle  {
+        if shouldDisplaySubtitle  {
             subtitleLabel.text = configuration.subtitle
             subtitleLabel.textAlignment = textAlignment
 
             if !subtitleLabel.isDescendant(of: self) {
                 addSubview(subtitleLabel)
+                didAddSubtitleView = true
             }
-        } else {
+        } else if didAddSubtitleView {
             subtitleLabel.text = nil
             subtitleLabel.removeFromSuperview()
+            didAddSubtitleView = false
         }
         
-        invalidateIntrinsicContentSize()
-        
+        validFitSize = nil
         setNeedsLayout()
-        layoutIfNeeded()
+        invalidateIntrinsicContentSize()
     }
     
     public override func layoutSubviews() {
         super.layoutSubviews()
+        
+        self.backgroundView.frame = bounds
         
         // layout priority: image -> title -> subtitle
                 
@@ -233,12 +270,12 @@ public class ConfigurationBasedButton: UIControl {
 
         let contentSize = CGSize(width: bounds.width - effectiveContentInsets.left - effectiveContentInsets.right, height: bounds.height - effectiveContentInsets.top - effectiveContentInsets.bottom).eraseNegative()
 
-        let isDisplayingImage = self.isDisplayingImage
-        let isDisplayingTitle = self.isDisplayingTitle
-        let isDisplayingSubtitle = self.isDisplayingSubtitle
+        let shouldDisplayImage = self.shouldDisplayImage
+        let shouldDisplayTitle = self.shouldDisplayTitle
+        let shouldDisplaySubtitle = self.shouldDisplaySubtitle
     
-        let imagePadding = isDisplayingImage && (isDisplayingTitle || isDisplayingSubtitle) ? configuration.imagePadding : 0
-        let titlePadding = isDisplayingTitle && isDisplayingSubtitle ? configuration.titlePadding : 0
+        let imagePadding = shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) ? configuration.imagePadding : 0
+        let titlePadding = shouldDisplayTitle && shouldDisplaySubtitle ? configuration.titlePadding : 0
                 
         var imageFrame = CGRect.zero
         var titleFrame = CGRect.zero
@@ -249,63 +286,67 @@ public class ConfigurationBasedButton: UIControl {
         var subtitleLimitSize = CGSize.zero
         
 
-        if isDisplayingImage {
+        if shouldDisplayImage {
             imageLimitSize = contentSize
             imageFrame.size = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
         }
         
         switch effectiveImagePlacement {
         case .top, .bottom:
-            if isDisplayingTitle {
+            if shouldDisplayTitle {
                 titleLimitSize = CGSize(width: contentSize.width, height: contentSize.height - imageFrame.height - imagePadding).eraseNegative()
                 titleFrame.size = titleLabel.sizeThatFits(titleLimitSize).limit(to: titleLimitSize)
             }
-            if isDisplayingSubtitle {
+            if shouldDisplaySubtitle {
                 subtitleLimitSize = CGSize(width: contentSize.width, height: contentSize.height - imageFrame.height - imagePadding - titleFrame.height - titlePadding).eraseNegative()
                 subtitleFrame.size = subtitleLabel.sizeThatFits(subtitleLimitSize).limit(to: subtitleLimitSize)
             }
 
             switch effectiveContentHorizontalAlignment {
             case .left:
-                if isDisplayingImage {
-                    imageFrame.origin.x = effectiveContentInsets.left
+                let maxContentWidth = max(imageFrame.width, max(titleFrame.width, subtitleFrame.width))
+                
+                if shouldDisplayImage {
+                    imageFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - imageFrame.width) / 2
                 }
-                if isDisplayingTitle {
-                    titleFrame.origin.x = effectiveContentInsets.left
+                if shouldDisplayTitle {
+                    titleFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - titleFrame.width) / 2
                 }
-                if isDisplayingSubtitle {
-                    subtitleFrame.origin.x = effectiveContentInsets.left
+                if shouldDisplaySubtitle {
+                    subtitleFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - subtitleFrame.width) / 2
                 }
             case .center:
-                if isDisplayingImage {
+                if shouldDisplayImage {
                     imageFrame.origin.x = effectiveContentInsets.left + (imageLimitSize.width - imageFrame.width) / 2
                 }
-                if isDisplayingTitle {
+                if shouldDisplayTitle {
                     titleFrame.origin.x = effectiveContentInsets.left + (titleLimitSize.width - titleFrame.width) / 2
                 }
-                if isDisplayingSubtitle {
+                if shouldDisplaySubtitle {
                     subtitleFrame.origin.x = effectiveContentInsets.left + (subtitleLimitSize.width - subtitleFrame.width) / 2
                 }
             case .right:
-                if isDisplayingImage {
-                    imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width
+                let maxContentWidth = max(imageFrame.width, max(titleFrame.width, subtitleFrame.width))
+
+                if shouldDisplayImage {
+                    imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width - (maxContentWidth - imageFrame.width) / 2
                 }
-                if isDisplayingTitle {
-                    titleFrame.origin.x = bounds.width - effectiveContentInsets.right - titleFrame.width
+                if shouldDisplayTitle {
+                    titleFrame.origin.x = bounds.width - effectiveContentInsets.right - titleFrame.width - (maxContentWidth - titleFrame.width) / 2
                 }
-                if isDisplayingSubtitle {
-                    subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - subtitleFrame.width
+                if shouldDisplaySubtitle {
+                    subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - subtitleFrame.width - (maxContentWidth - subtitleFrame.width) / 2
                 }
             case .fill:
-                if isDisplayingImage {
+                if shouldDisplayImage {
                     imageFrame.origin.x = effectiveContentInsets.left
                     imageFrame.size.width = imageLimitSize.width
                 }
-                if isDisplayingTitle {
+                if shouldDisplayTitle {
                     titleFrame.origin.x = effectiveContentInsets.left
                     titleFrame.size.width = titleLimitSize.width
                 }
-                if isDisplayingSubtitle {
+                if shouldDisplaySubtitle {
                     subtitleFrame.origin.x = effectiveContentInsets.left
                     subtitleFrame.size.width = subtitleLimitSize.width
                 }
@@ -315,63 +356,63 @@ public class ConfigurationBasedButton: UIControl {
             if effectiveImagePlacement == .top {
                 switch contentVerticalAlignment {
                 case .top:
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.y = effectiveContentInsets.top
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding + titleFrame.height + titlePadding
                     }
                 case .center:
                     let contentHeight = imageFrame.height + imagePadding + titleFrame.height + titlePadding + subtitleFrame.height
                     let minY = effectiveContentInsets.top + (contentSize.height - contentHeight) / 2
                   
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.y = minY
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.y = minY + imageFrame.height + imagePadding
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = minY + imageFrame.height + imagePadding + titleFrame.height + titlePadding
                     }
                 case .bottom:
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height
                     }
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height - imagePadding - imageFrame.height
                     }
                 case .fill:
-                    if isDisplayingImage && (isDisplayingTitle || isDisplayingSubtitle) {
+                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
                         imageFrame.origin.y = effectiveContentInsets.top
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding
-                            if !isDisplayingSubtitle {
+                            if !shouldDisplaySubtitle {
                                 titleFrame.size.height = max(bounds.height - titleFrame.minY - effectiveContentInsets.bottom, 0)
                             }
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding + titleFrame.height + titlePadding
                             subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - effectiveContentInsets.bottom, 0)
                         }
-                    } else if isDisplayingImage {
+                    } else if shouldDisplayImage {
                         imageFrame.origin.y = effectiveContentInsets.top
                         imageFrame.size.height = contentSize.height
                     } else {
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top
-                            if !isDisplayingSubtitle {
+                            if !shouldDisplaySubtitle {
                                 titleFrame.size.height = contentSize.height
                             }
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
                             subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - effectiveContentInsets.bottom, 0)
                         }
@@ -381,63 +422,63 @@ public class ConfigurationBasedButton: UIControl {
             } else {
                 switch contentVerticalAlignment {
                 case .top:
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.y = effectiveContentInsets.top
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
                     }
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding + subtitleFrame.height + imagePadding
                     }
                 case .center:
                     let contentHeight = imageFrame.height + imagePadding + titleFrame.height + titlePadding + subtitleFrame.height
                     let minY = effectiveContentInsets.top + (contentSize.height - contentHeight) / 2
                   
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.y = minY
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = minY + titleFrame.height + titlePadding
                     }
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.y = minY + titleFrame.height + titlePadding + subtitleFrame.height + imagePadding
                     }
                 case .bottom:
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height - imagePadding - subtitleFrame.height
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height - imagePadding - subtitleFrame.height - titlePadding - titleFrame.height
                     }
                 case .fill:
-                    if isDisplayingImage && (isDisplayingTitle || isDisplayingSubtitle) {
+                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
                         imageFrame.origin.y = bounds.height - effectiveContentInsets.top - imageFrame.height
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top
-                            if !isDisplayingSubtitle {
+                            if !shouldDisplaySubtitle {
                                 titleFrame.size.height = max(bounds.height - titleFrame.minY - imagePadding - imageFrame.height - effectiveContentInsets.bottom, 0)
                             }
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
                             subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - imagePadding - imageFrame.height - effectiveContentInsets.bottom, 0)
                         }
-                    } else if isDisplayingImage {
+                    } else if shouldDisplayImage {
                         imageFrame.origin.y = effectiveContentInsets.top
                         imageFrame.size.height = contentSize.height
                     } else {
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top
-                            if !isDisplayingSubtitle {
+                            if !shouldDisplaySubtitle {
                                 titleFrame.size.height = contentSize.height
                             }
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
                             subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - effectiveContentInsets.bottom, 0)
                         }
@@ -447,62 +488,68 @@ public class ConfigurationBasedButton: UIControl {
             }
 
         case .left, .right:
-            if isDisplayingTitle {
+            if shouldDisplayTitle {
                 titleLimitSize = CGSize(width: contentSize.width - imageFrame.width - imagePadding, height: contentSize.height).eraseNegative()
                 titleFrame.size = titleLabel.sizeThatFits(titleLimitSize).limit(to: titleLimitSize)
             }
-            if isDisplayingSubtitle {
+            if shouldDisplaySubtitle {
                 subtitleLimitSize = CGSize(width: contentSize.width - imageFrame.width - imagePadding, height: contentSize.height - titleFrame.height - titlePadding).eraseNegative()
                 subtitleFrame.size = subtitleLabel.sizeThatFits(subtitleLimitSize).limit(to: subtitleLimitSize)
             }
             
             switch contentVerticalAlignment {
             case .top:
-                if isDisplayingImage {
-                    imageFrame.origin.y = effectiveContentInsets.top
+                let titleTotalHeight = titleFrame.height + titlePadding + subtitleFrame.height
+                let maxContentHeight = max(imageFrame.height, titleTotalHeight)
+                
+                if shouldDisplayImage {
+                    imageFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - imageFrame.height) / 2
                 }
-                if isDisplayingTitle {
-                    titleFrame.origin.y = effectiveContentInsets.top
+                if shouldDisplayTitle {
+                    titleFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - titleTotalHeight) / 2
                 }
-                if isDisplayingSubtitle {
-                    subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
+                if shouldDisplaySubtitle {
+                    subtitleFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - titleTotalHeight) / 2 + titleFrame.height + titlePadding
                 }
             case .center:
-                if isDisplayingImage {
+                if shouldDisplayImage {
                     imageFrame.origin.y = effectiveContentInsets.top + (contentSize.height - imageFrame.height) / 2
                 }
                 
                 let titleTotalHeight = titleFrame.height + titlePadding + subtitleFrame.height
                 let minY = effectiveContentInsets.top + (contentSize.height - titleTotalHeight) / 2
             
-                if isDisplayingTitle {
+                if shouldDisplayTitle {
                     titleFrame.origin.y = minY
                 }
-                if isDisplayingSubtitle {
+                if shouldDisplaySubtitle {
                     subtitleFrame.origin.y = minY + titleFrame.height + titlePadding
                 }
             case .bottom:
-                if isDisplayingImage {
-                    imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height
+                let titleTotalHeight = titleFrame.height + titlePadding + subtitleFrame.height
+                let maxContentHeight = max(imageFrame.height, titleTotalHeight)
+                
+                if shouldDisplayImage {
+                    imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height - (maxContentHeight - imageFrame.height) / 2
                 }
-                if isDisplayingSubtitle {
-                    subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height
+                if shouldDisplaySubtitle {
+                    subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - (maxContentHeight - titleTotalHeight) / 2
                 }
-                if isDisplayingTitle {
-                    titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height
+                if shouldDisplayTitle {
+                    titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height - (maxContentHeight - titleTotalHeight) / 2
                 }
             case .fill:
-                if isDisplayingImage {
+                if shouldDisplayImage {
                     imageFrame.origin.y = effectiveContentInsets.top
                     imageFrame.size.height = contentSize.height
                 }
-                if isDisplayingTitle {
+                if shouldDisplayTitle {
                     titleFrame.origin.y = effectiveContentInsets.top
-                    if !isDisplayingSubtitle {
+                    if !shouldDisplaySubtitle {
                         titleFrame.size.height = contentSize.height
                     }
                 }
-                if isDisplayingSubtitle {
+                if shouldDisplaySubtitle {
                     subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
                     subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - effectiveContentInsets.bottom, 0)
                 }
@@ -512,59 +559,59 @@ public class ConfigurationBasedButton: UIControl {
             if effectiveImagePlacement == .left {
                 switch effectiveContentHorizontalAlignment {
                 case .left:
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.x = effectiveContentInsets.left
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
                     }
                 case .center:
                     let contentWidth = imageFrame.width + imagePadding + max(titleFrame.width, subtitleFrame.width)
                     let minX = effectiveContentInsets.left + (contentSize.width - contentWidth) / 2
                     
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.x = minX
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.x = minX + imageFrame.width + imagePadding
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = minX + imageFrame.width + imagePadding
                     }
                 case .right:
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.x = bounds.width - effectiveContentInsets.right - max(titleFrame.width, subtitleFrame.width) - imagePadding - imageFrame.width
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.x = bounds.width - effectiveContentInsets.right - titleFrame.width
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - subtitleFrame.width
                     }
                 case .fill:
-                    if isDisplayingImage && (isDisplayingTitle || isDisplayingSubtitle) {
+                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
                         imageFrame.origin.x = effectiveContentInsets.left
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
                             titleFrame.size.width = contentSize.width - imagePadding - imageFrame.width
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
                             subtitleFrame.size.width = contentSize.width - imagePadding - imageFrame.width
                         }
-                    } else if isDisplayingImage {
+                    } else if shouldDisplayImage {
                         imageFrame.origin.x = effectiveContentInsets.left
                         imageFrame.size.width = contentSize.width
                     } else {
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left
                             titleFrame.size.width = contentSize.width
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.x = effectiveContentInsets.left
                             subtitleFrame.size.width = contentSize.width
                         }
@@ -574,59 +621,59 @@ public class ConfigurationBasedButton: UIControl {
             } else {
                 switch effectiveContentHorizontalAlignment {
                 case .left:
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.x = effectiveContentInsets.left
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = effectiveContentInsets.left
                     }
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.x = effectiveContentInsets.left + max(titleFrame.width, subtitleFrame.width) + imagePadding
                     }
                 case .center:
                     let contentWidth = imageFrame.width + imagePadding + max(titleFrame.width, subtitleFrame.width)
                     let minX = effectiveContentInsets.left + (contentSize.width - contentWidth) / 2
                     
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.x = minX
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = minX
                     }
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.x = minX + max(titleFrame.width, subtitleFrame.width) + imagePadding
                     }
                 case .right:
-                    if isDisplayingImage {
+                    if shouldDisplayImage {
                         imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width
                     }
-                    if isDisplayingTitle {
+                    if shouldDisplayTitle {
                         titleFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width - imagePadding - titleFrame.width
                     }
-                    if isDisplayingSubtitle {
+                    if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width - imagePadding - subtitleFrame.width
                     }
                 case .fill:
-                    if isDisplayingImage && (isDisplayingTitle || isDisplayingSubtitle) {
+                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
                         imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left
                             titleFrame.size.width = imageFrame.minX - imagePadding - titleFrame.minX
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.x = effectiveContentInsets.left
                             subtitleFrame.size.width = imageFrame.minX - imagePadding - titleFrame.minX
                         }
-                    } else if isDisplayingImage {
+                    } else if shouldDisplayImage {
                         imageFrame.origin.x = effectiveContentInsets.left
                         imageFrame.size.width = contentSize.width
                     } else {
-                        if isDisplayingTitle {
+                        if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left
                             titleFrame.size.width = contentSize.width
                         }
-                        if isDisplayingSubtitle {
+                        if shouldDisplaySubtitle {
                             subtitleFrame.origin.x = effectiveContentInsets.left
                             subtitleFrame.size.width = contentSize.width
                         }
@@ -638,7 +685,7 @@ public class ConfigurationBasedButton: UIControl {
         }
 
         // Adjust frame based on title alignment
-        if isDisplayingTitle && isDisplayingSubtitle && titleFrame.width != subtitleFrame.width {
+        if shouldDisplayTitle && shouldDisplaySubtitle && titleFrame.width != subtitleFrame.width {
             let isSubtitleFrameUpdated: Bool
             let widerFrame: CGRect
             var updatedFrame: CGRect
@@ -671,38 +718,54 @@ public class ConfigurationBasedButton: UIControl {
         }
         
         
-        if isDisplayingImage {
+        if shouldDisplayImage {
             imageView.frame = imageFrame
         }
-        if isDisplayingTitle {
+        if shouldDisplayTitle {
             titleLabel.frame = titleFrame
         }
-        if isDisplayingSubtitle {
+        if shouldDisplaySubtitle {
             subtitleLabel.frame = subtitleFrame
         }
     }
     
     public override func updateConstraints() {
-        invalidateIntrinsicContentSize()
         super.updateConstraints()
+        invalidateIntrinsicContentSize()
     }
 
     private var isCallingSystemLayoutSizeFitting = false
     public override var intrinsicContentSize: CGSize {
+        // TODO:
+        
+//        var limitWidth: CGFloat?
+//        for constraint in constraintsAffectingLayout(for: .horizontal) {
+//            if constraint.firstItem === self && constraint.firstAttribute == .width && NSStringFromClass(type(of: constraint)) != "NSContentSizeLayoutConstraint"  {
+//                limitWidth = constraint.constant
+//            }
+//        }
+//        
+//        if let limitWidth = limitWidth {
+//            return sizeThatFits(CGSize(width: limitWidth, height: .greatestFiniteMagnitude))
+//        } else {
+//            return sizeThatFits(.max)
+//        }
+        
         // Make instrinsic height adapt to constrained width.
         //
         // (1) If constrained width was set, call systemLayoutSizeFitting() can return the limit/constrained width, then use this width to calculate fit height (if the contrained height was not set, will use this height).
         // (2) If not set, system will use instrinsic width, call systemLayoutSizeFitting() return the fit width (is result of sizeThatFits(CGSize.max))
         
-        if isCallingSystemLayoutSizeFitting {
-            return sizeThatFits(CGSize.max)
-        }
-        
-        isCallingSystemLayoutSizeFitting = true
-        let size = super.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        isCallingSystemLayoutSizeFitting = false
-        
-        return sizeThatFits(CGSize(width: size.width, height: CGFloat.greatestFiniteMagnitude))
+//        if isCallingSystemLayoutSizeFitting {
+//            return sizeThatFits(CGSize.max)
+//        }
+//
+//        isCallingSystemLayoutSizeFitting = true
+//        var limitWidth = systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
+//        limitWidth = min(sizeThatFits(CGSize.max).width, limitWidth)
+//        isCallingSystemLayoutSizeFitting = false
+//
+//        return sizeThatFits(CGSize(width: limitWidth, height: CGFloat.greatestFiniteMagnitude))
     }
     
     private var isFittingSize: Bool = false
@@ -718,14 +781,19 @@ public class ConfigurationBasedButton: UIControl {
             limitSize = CGSize.max
         }
         
+        // return cached size
+        if let validFitSize = validFitSize, limitSize == CGSize.max {
+            return validFitSize
+        }
+        
         var resultSize = CGSize.zero
         
-        let isDisplayingImage = self.isDisplayingImage
-        let isDisplayingTitle = self.isDisplayingTitle
-        let isDisplayingSubtitle = self.isDisplayingSubtitle
+        let shouldDisplayImage = self.shouldDisplayImage
+        let shouldDisplayTitle = self.shouldDisplayTitle
+        let shouldDisplaySubtitle = self.shouldDisplaySubtitle
         
-        let imagePadding = isDisplayingImage && (isDisplayingTitle || isDisplayingSubtitle) ? configuration.imagePadding : 0
-        let titlePadding = isDisplayingTitle && isDisplayingSubtitle ? configuration.titlePadding : 0
+        let imagePadding = shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) ? configuration.imagePadding : 0
+        let titlePadding = shouldDisplayTitle && shouldDisplaySubtitle ? configuration.titlePadding : 0
         
         let horizontalInset: CGFloat
         let verticalInset: CGFloat
@@ -746,16 +814,16 @@ public class ConfigurationBasedButton: UIControl {
         
         switch configuration.imagePlacement {
         case .top, .bottom:
-            if isDisplayingImage {
+            if shouldDisplayImage {
                 let imageLimitSize = CGSize(width: contentLimitSize.width, height: CGFloat.greatestFiniteMagnitude)
                 imageSize = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
             }
-            if isDisplayingTitle {
+            if shouldDisplayTitle {
                 let titleLimitSize = CGSize(width: contentLimitSize.width, height: contentLimitSize.height - imageSize.height - imagePadding).eraseNegative()
                 titleSize = titleLabel.sizeThatFits(titleLimitSize)
                 titleSize.height = min(titleSize.height, titleLimitSize.height)
             }
-            if isDisplayingSubtitle {
+            if shouldDisplaySubtitle {
                 let subtitleLimitSize = CGSize(width: contentLimitSize.width, height: contentLimitSize.height - imageSize.height - imagePadding - titleSize.height - titlePadding).eraseNegative()
                 subtitleSize = subtitleLabel.sizeThatFits(subtitleLimitSize)
                 subtitleSize.height = min(subtitleSize.height, subtitleLimitSize.height)
@@ -763,22 +831,26 @@ public class ConfigurationBasedButton: UIControl {
             resultSize.width = horizontalInset + max(imageSize.width, max(titleSize.width, subtitleSize.width))
             resultSize.height = verticalInset + imageSize.height + imagePadding + titleSize.height + titlePadding + subtitleSize.height
         case .left, .right, .leading, .trailing:
-            if isDisplayingImage {
+            if shouldDisplayImage {
                 let imageLimitSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: contentLimitSize.height)
                 imageSize = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
             }
-            if isDisplayingTitle {
+            if shouldDisplayTitle {
                 let titleLimitSize = CGSize(width: contentLimitSize.width - imageSize.width - imagePadding, height: contentLimitSize.height).eraseNegative()
                 titleSize = titleLabel.sizeThatFits(titleLimitSize)
                 titleSize.height = min(titleSize.height, titleLimitSize.height)
             }
-            if isDisplayingSubtitle {
+            if shouldDisplaySubtitle {
                 let subtitleLimitSize = CGSize(width: contentLimitSize.width - imageSize.width - imagePadding, height: contentLimitSize.height).eraseNegative()
                 subtitleSize = subtitleLabel.sizeThatFits(subtitleLimitSize)
                 subtitleSize.height = min(subtitleSize.height, subtitleLimitSize.height)
             }
             resultSize.width = horizontalInset + imageSize.width + imagePadding + max(titleSize.width, subtitleSize.width)
             resultSize.height = verticalInset + max(imageSize.height, titleSize.height + titlePadding + subtitleSize.height)
+        }
+        
+        if limitSize == CGSize.max {
+            validFitSize = resultSize
         }
         
         return resultSize

@@ -29,6 +29,13 @@ class ConfigurationBasedButtonViewController: UIViewController {
         let image = UIImage(systemName: "house.circle.fill", withConfiguration: imageConfig)
         configuration.image = image
         
+        var bgConfig = BackgroundConfiguration()
+        bgConfig.fillColor = .cyan
+        bgConfig.strokeColor = .orange
+        bgConfig.strokeOutset = 10
+        bgConfig.strokeWidth = 1
+        configuration.background = bgConfig
+        
         button.configuration = configuration
         
         button.addTarget(self, action: #selector(buttonAction(sender:)), for: .touchUpInside)
