@@ -34,7 +34,7 @@ Custom button inherited from UIControl, which behavior like UIButton.
 
 ### Start
 ```swift
- // Create base configuration
+// Create base configuration.
 var baseConfiguration = ButtonConfiguration()
 baseConfiguration.title = "Title"
 baseConfiguration.subtitle = "Subtitle"
@@ -42,7 +42,7 @@ baseConfiguration.image = UIImage(systemName: "house.circle.fill")
 baseConfiguration.imagePadding = 10
 baseConfiguration.contentInsets = .nondirectional(.init(top: 10, left: 40, bottom: 10, right: 40))
 
-// Create configuration provider
+// Create plain-style configuration provider.
 let configurationProvider = PlainButtonConfigurationProvider()
 
 // Create button1 with baseConfiguration, configurationProvider and action for `touchUpInside`.
@@ -50,13 +50,20 @@ let button1 = ConfigurationBasedButton(baseConfiguration: baseConfiguration, con
     print("Button1 has been tapped")
 }
 
-// Create button2 with button1's base configuration
+// Create button2 with button1's base configuration.
 let button2 = ConfigurationBasedButton()
 button2.baseConfiguration = button1.baseConfiguration
 
-// Create button3 with current button1's effective configuration
+// Create button3 with current button1's effective configuration.
 button1.isHighlighted = true
 let button3 = ConfigurationBasedButton(baseConfiguration: button1.effectiveConfiguration)
+
+// Update configuration.
+// The UI will not be updated immediately, multiple requests may be coalesced into a single update at the appropriate time.
+button1.baseConfiguration.title = "Update Title"
+button1.baseConfiguration.image = nil
+button1.baseConfiguration.background?.fillColor = UIColor.white
+button1.baseConfiguration.background?.cornerStyle = .capsule
 ```
 
 
