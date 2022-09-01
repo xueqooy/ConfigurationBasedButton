@@ -386,7 +386,7 @@ open class ConfigurationBasedButton: UIControl {
             } else if let title = effectiveConfiguration.title {
                 titleLabel.text = title
             }
-            titleLabel.font = effectiveConfiguration.titleFont
+            titleLabel.font = effectiveConfiguration.titleFont ?? .preferredFont(forTextStyle: .headline)
             titleLabel.textAlignment = textAlignment
         }
         
@@ -396,7 +396,7 @@ open class ConfigurationBasedButton: UIControl {
             } else if let subtitle = effectiveConfiguration.subtitle {
                 subtitleLabel.text = subtitle
             }
-            subtitleLabel.font = effectiveConfiguration.subtitleFont
+            subtitleLabel.font = effectiveConfiguration.subtitleFont ?? .preferredFont(forTextStyle: .subheadline)
             subtitleLabel.textAlignment = textAlignment
         }
     }
@@ -1060,7 +1060,6 @@ open class ConfigurationBasedButton: UIControl {
     private lazy var titleLabel: UILabel = {
         let titleLabel = UILabel()
         titleLabel.textColor = effectiveConfiguration.foregroundColor ?? tintColor
-        titleLabel.font = .preferredFont(forTextStyle: .headline)
         titleLabel.numberOfLines = 0
         return titleLabel
     }()
@@ -1068,7 +1067,6 @@ open class ConfigurationBasedButton: UIControl {
     private lazy var subtitleLabel: UILabel = {
         let subtitleLabel = UILabel()
         subtitleLabel.textColor = effectiveConfiguration.foregroundColor ?? tintColor
-        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
         subtitleLabel.numberOfLines = 0
         return subtitleLabel
     }()

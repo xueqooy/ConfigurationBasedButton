@@ -111,7 +111,9 @@ class ConfigurationBasedButtonViewController: UIViewController {
         systemButtonConfiguration.preferredSymbolConfigurationForImage = imageConfig
         systemButtonConfiguration.contentInsets = NSDirectionalEdgeInsets.zero
         systemButton.configuration = systemButtonConfiguration
-
+        
+//        button.baseConfiguration.foregroundColor = .white
+//
 //        button.configurationProvider = EDStyleButtonConfigurationProvider(style: .primaryOutline)
     }
     
