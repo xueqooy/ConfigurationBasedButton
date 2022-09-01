@@ -11,28 +11,31 @@ public enum CornerStyle: Equatable {
     case fixed(CGFloat), capsule
 }
 
-public struct BackgroundConfiguration: Equatable {
-
+public struct BackgroundConfiguration {
+    /// Configures the color of the background
     public var fillColor: UIColor?
-
+    /// Configures the color of the stroke. A nil value uses the view's tint color.
     public var strokeColor: UIColor?
-    
+    /// The width of the stroke. Default is 0.
     public var strokeWidth: CGFloat = 0
-    
+    /// Outset (or inset, if negative) for the stroke. Default is 0.
+    /// The corner radius of the stroke is adjusted for any outset to remain concentric with the background.
     public var strokeOutset: CGFloat = 0
-    
+    /// The corner style for the background and stroke. This is also applied to the custom view. Default is .fixed(0).
     public var cornerStyle: CornerStyle?
-            
+    /// The visual effect to apply to the background. Default is nil.
     public var visualEffect: UIVisualEffect?
-    
+    /// A custom view for the background.
     public var customView: UIView?
-    
+    /// The image to use. Default is nil.
     public var image: UIImage?
-    
+    /// The content mode to use when rendering the image. Default is UIViewContentModeScaleToFill.
     public var imageContentMode: UIView.ContentMode = .scaleToFill
     
     public init() {}
 }
+
+extension BackgroundConfiguration: Equatable {}
 
 public class BackgroundView: UIView {
     
@@ -59,9 +62,6 @@ public class BackgroundView: UIView {
     private lazy var strokeView: UIView = {
         let strokeView = UIView()
         strokeView.clipsToBounds = true
-        if #available(iOS 13.0, *) {
-            strokeView.layer.cornerCurve = .continuous
-        }
         return strokeView
     }()
     
@@ -83,7 +83,7 @@ public class BackgroundView: UIView {
     }
     
     private var shouldDisplayStrokeView: Bool {
-        configuration.strokeColor != nil && configuration.strokeWidth > 0
+        configuration.strokeWidth > 0
     }
     
     private var shouldDisplayImageView: Bool {
@@ -176,7 +176,7 @@ public class BackgroundView: UIView {
         }
         
         if shouldDisplayStrokeView {
-            strokeView.layer.borderColor = configuration.strokeColor?.cgColor
+            strokeView.layer.borderColor = configuration.strokeColor?.cgColor ?? self.tintColor.cgColor
             strokeView.layer.borderWidth = configuration.strokeWidth
             
             if !strokeView.isDescendant(of: self) {
@@ -200,7 +200,7 @@ public class BackgroundView: UIView {
             case .fixed(let value):
                 cornerRadius = value
             case .capsule:
-                cornerRadius = bounds.height / 2.0
+                cornerRadius = min(bounds.height, bounds.width) / 2.0
             }
         }
         
@@ -231,7 +231,14 @@ public class BackgroundView: UIView {
                 strokeView.layer.cornerRadius = cornerRadius + outset
             }
         }
+    }
+    
+    public override func tintColorDidChange() {
+        super.tintColorDidChange()
         
+        if shouldDisplayStrokeView && configuration.strokeColor == nil {
+            strokeView.layer.borderColor = self.tintColor.cgColor
+        }
     }
     
 }

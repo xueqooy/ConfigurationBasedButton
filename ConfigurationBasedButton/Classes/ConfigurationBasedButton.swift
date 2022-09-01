@@ -7,198 +7,358 @@
 
 import UIKit
 
-public enum EdgeInsets: Equatable {
+private class ButtonConfigurationUpdateTransaction {
+   
+    private static var observer: CFRunLoopObserver?
+    private static var transactionSet: Set<ButtonConfigurationUpdateTransaction>?
+    private static func setupMainRunloopObserverIfNecessary() {
+        if let _ = observer {
+            return
+        }
+        
+        transactionSet = Set<ButtonConfigurationUpdateTransaction>()
+        
+        observer = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, CFRunLoopActivity.beforeWaiting.rawValue | CFRunLoopActivity.exit.rawValue, true, 0) { _, _ in
+            guard let currentSet = transactionSet, !currentSet.isEmpty else { return }
+            transactionSet?.removeAll()
+            
+            currentSet.forEach { transaction in
+                transaction.block()
+            }
+            
+        }
+        if let observer = observer {
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, CFRunLoopMode.defaultMode)
+        }
+    }
+    
+    
+    private let block: () -> Void
+    
+    public init(_ block: @escaping () -> Void) {
+        self.block = block
+    }
+    
+    func commit() {
+        Self.setupMainRunloopObserverIfNecessary()
+        Self.transactionSet?.insert(self)
+    }
+
+}
+
+extension ButtonConfigurationUpdateTransaction: Hashable {
+    public static func == (lhs: ButtonConfigurationUpdateTransaction, rhs: ButtonConfigurationUpdateTransaction) -> Bool {
+        return lhs === rhs
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self))
+    }
+}
+
+
+public enum EdgeInsets {
     case directional(NSDirectionalEdgeInsets), nondirectional(UIEdgeInsets)
 }
 
-public struct ButtonConfiguration: Equatable {
+extension EdgeInsets: Equatable {}
+
+
+public struct ButtonConfiguration {
     public enum ImagePlacement: Int, Equatable {
         case leading, trailing, top, left, bottom, right
     }
     
     public enum TitleAlignment: Int, Equatable {
-        // Automatically adjust according to image placement
+        /// Align title & subtitle automatically based on ImagePlacement
         case automatic
         case leading, center, trailing, left, right
     }
     
     public var image: UIImage?
-    public var title: String?
-    public var subtitle: String?
     
+    public var title: String?
+    public var titleFont: UIFont?
+    public var titleColor: UIColor?
+    public var attributedTitle: NSAttributedString?
+    
+    public var subtitle: String?
+    public var subtitleFont: UIFont?
+    public var subtitleColor: UIColor?
+    public var attributedSubtitle: NSAttributedString?
+    
+    /// Shows an activity indicator in place of an image. Its placement is controlled by `imagePlacement` .
+    public var showsActivityIndicator: Bool = false
+
+    /// Defaults to Leading.
     public var imagePlacement: ButtonConfiguration.ImagePlacement = .leading
+    /// The alignment to use for relative layout between title & subtitle.
     public var titleAlignment: ButtonConfiguration.TitleAlignment = .automatic
     
+    /// Insets from the bounds of the button to create the content region.
     public var contentInsets: EdgeInsets = .directional(.zero)
+    /// When a button has both image and text content, this value is the padding between the image and the text.
     public var imagePadding: CGFloat = 0
+    /// When a button has both a title & subtitle, this value is the padding between those titles.
     public var titlePadding: CGFloat = 0
+        
+    /// A BackgroundConfiguration describing the button's background.
+    public var background: BackgroundConfiguration? = BackgroundConfiguration()
     
-//    var showsActivityIndicator: Bool = false
-    public var background: BackgroundConfiguration?
+    /// The base color to use for background elements.
+    public var foregroundColor: UIColor?
 
     public init() {
     }
 }
 
-public class ConfigurationBasedButton: UIControl {
+extension ButtonConfiguration: Equatable {}
+
+
+/// The type that provide effective configuration for button.
+public protocol ButtonConfigurationProviderType {
+    func configuration(for button: ConfigurationBasedButton) -> ButtonConfiguration
+}
+
+/// Apply extra transparency on configuration's colors based on the state(normal, disabled, highlighted).
+open class PlainButtonConfigurationProvider: ButtonConfigurationProviderType {
+    
+    public enum State {
+        case normal, disabled, highlighted
         
-    public var configuration: ButtonConfiguration {
+        static func state(from button: ConfigurationBasedButton) -> State {
+            if !button.isEnabled {
+                return .disabled
+            } else if button.isHighlighted {
+                return .highlighted
+            }
+            return .normal
+        }
+    }
+    
+    private var latestBaseConfiguration: ButtonConfiguration? {
         didSet {
-            if configuration != oldValue {
-                update()
+            if latestBaseConfiguration != oldValue {
+                normalConfiguration = nil
+                disabledConfiguration = nil
+                highlightedConfiguration = nil
             }
         }
     }
     
-    public override var contentVerticalAlignment: UIControl.ContentVerticalAlignment {
+    // Cache values for states.
+    
+    private var normalConfiguration: ButtonConfiguration?
+    private var disabledConfiguration: ButtonConfiguration?
+    private var highlightedConfiguration: ButtonConfiguration?
+
+    public init() {
+    }
+    
+    private func configuration(for state: State) -> ButtonConfiguration? {
+        switch state {
+        case .normal:
+            return normalConfiguration
+        case .disabled:
+            return disabledConfiguration
+        case .highlighted:
+            return highlightedConfiguration
+        }
+    }
+    
+    private func set(configuration: ButtonConfiguration, for state: State) {
+        switch state {
+        case .normal:
+             normalConfiguration = configuration
+        case .disabled:
+             disabledConfiguration = configuration
+        case .highlighted:
+             highlightedConfiguration = configuration
+        }
+    }
+    
+    open func configuration(for button: ConfigurationBasedButton) -> ButtonConfiguration {
+        self.latestBaseConfiguration = button.baseConfiguration
+        
+        let state = State.state(from: button)
+        if let configuration = configuration(for: state) {
+            return configuration
+        }
+    
+        var configuration = button.baseConfiguration
+      
+        update(&configuration, for: button)
+        set(configuration: configuration, for: state)
+        
+        return configuration
+    }
+
+    /// Subclasses can override this function to return the extra transparency in different states.
+    open func overlayAlpha(for state: State) -> CGFloat? {
+        switch state {
+        case .normal:
+            return nil
+        case .disabled:
+            return 0.35
+        case .highlighted:
+            return 0.75
+        }
+    }
+    
+    /// Modify the colors of configuration.
+    open func update(_ configuration: inout ButtonConfiguration, for button: ConfigurationBasedButton) {
+        if let overlayAlpha = overlayAlpha(for: State.state(from: button)) {
+            if let forgroundColor = configuration.foregroundColor ?? button.tintColor {
+                configuration.foregroundColor = forgroundColor.withOverlayAlpha(overlayAlpha)
+            }
+            
+            if let titleColor = configuration.titleColor {
+                configuration.titleColor = titleColor.withOverlayAlpha(overlayAlpha)
+            }
+            
+            if let subtitleColor = configuration.subtitleColor {
+                configuration.subtitleColor = subtitleColor.withOverlayAlpha(overlayAlpha)
+            }
+            
+            if let backgroundFillColor = configuration.background?.fillColor {
+                configuration.background?.fillColor = backgroundFillColor.withOverlayAlpha(overlayAlpha)
+            }
+            
+            if let backgroundStrokeColor = configuration.background?.strokeColor {
+                configuration.background?.strokeColor = backgroundStrokeColor.withOverlayAlpha(overlayAlpha)
+            }
+        }
+    }
+}
+
+
+open class ConfigurationBasedButton: UIControl {
+    /// The base configuration.
+    /// It's not used to represent the current UI state of the button, but the effective configuration is.
+    open var baseConfiguration: ButtonConfiguration {
         didSet {
-            if contentVerticalAlignment != oldValue {
-                setNeedsLayout()
-                layoutIfNeeded()
+            if baseConfiguration != oldValue {
+                setNeedsUpdateConfiguration()
             }
         }
     }
-    
-    public override var contentHorizontalAlignment: UIControl.ContentHorizontalAlignment {
+    /// The provider of effective configuration.
+    /// If value is nil, always use base configuration as effective  configuration.
+    open var configurationProvider: ButtonConfigurationProviderType? {
         didSet {
-            if contentHorizontalAlignment != oldValue {
-                setNeedsLayout()
-                layoutIfNeeded()
-            }
+            setNeedsUpdateConfiguration()
         }
     }
     
-    public var shouldDisplayBackground: Bool {
-        configuration.background != nil
-    }
+    /// The convenience for `touchUpInside` action.
+    open var touchUpInsideAction: ((ConfigurationBasedButton) -> Void)?
     
-    public var shouldDisplayImage: Bool {
-       configuration.image != nil
-    }
-    
-    public var shouldDisplayTitle: Bool {
-        !(configuration.title ?? "").isEmpty
-    }
-    
-    public var shouldDisplaySubtitle: Bool {
-        !(configuration.subtitle ?? "").isEmpty
-    }
-    
-    public var effectiveImagePlacement: ButtonConfiguration.ImagePlacement {
-        switch configuration.imagePlacement {
-        case .leading:
-            return isRTL ? .right : .left
-        case .trailing:
-            return isRTL ? .left : .right
-        default:
-            return configuration.imagePlacement
-        }
-    }
-    
-    public var effectiveTitleAlignment: ButtonConfiguration.TitleAlignment {
-        switch configuration.titleAlignment {
-        case .leading:
-            return isRTL ? .right : .left
-        case .trailing:
-            return isRTL ? .left : .right
-        case .automatic:
-            if shouldDisplayImage {
-                switch configuration.imagePlacement {
-                case .leading:
-                    return isRTL ? .right : .left
-                case .trailing:
-                    return isRTL ? .left : .right
-                case .top, .bottom:
-                    return .center
-                case .left:
-                    return .left
-                case .right:
-                    return .right
-                }
-            } else {
-                return isRTL ? .right : .left
-            }
-        default:
-            return configuration.titleAlignment
-        }
-    }
-    
-    public var effectiveContentInsets: UIEdgeInsets {
-        switch configuration.contentInsets {
-        case .directional(let insets):
-            return UIEdgeInsets(top: insets.top, left: isRTL ? insets.trailing : insets.leading, bottom: insets.bottom, right: isRTL ? insets.leading : insets.trailing)
-        case .nondirectional(let insets):
-            return insets
-        }
-    }
-    
-    private var didAddBackgroundView = false
-    private var didAddImageView = false
-    private var didAddTitleView = false
-    private var didAddSubtitleView = false
-    
-    private lazy var backgroundView: BackgroundView = {
-        let backgroundView = BackgroundView()
-        return backgroundView
-    }()
-    
-    private lazy var imageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.backgroundColor = .lightGray
-        imageView.contentMode = .scaleAspectFit
-        return imageView
-    }()
-    
-    private lazy var titleLabel: UILabel = {
-        let titleLabel = UILabel()
-        titleLabel.font = .preferredFont(forTextStyle: .headline)
-        titleLabel.backgroundColor = .lightGray
-        titleLabel.numberOfLines = 0
-        return titleLabel
-    }()
-    
-    private lazy var subtitleLabel: UILabel = {
-        let subtitleLabel = UILabel()
-        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
-        subtitleLabel.backgroundColor = .lightGray
-        subtitleLabel.numberOfLines = 0
-        return subtitleLabel
-    }()
-    
-    private var isRTL: Bool {
-        effectiveUserInterfaceLayoutDirection == .rightToLeft
-    }
-    
-    private var validFitSize: CGSize?
-    
-    public init(configuration: ButtonConfiguration = ButtonConfiguration()) {
-        self.configuration = configuration
+
+    public init(baseConfiguration: ButtonConfiguration = ButtonConfiguration(), configurationProvider: ButtonConfigurationProviderType? = PlainButtonConfigurationProvider(), touchUpInsideAction: ((ConfigurationBasedButton) -> Void)? = nil) {
+        self.baseConfiguration = baseConfiguration
+        self.effectiveConfiguration =  baseConfiguration
+        self.configurationProvider = configurationProvider
+        self.touchUpInsideAction = touchUpInsideAction
+        
         super.init(frame: .zero)
+
+        addTarget(self, action: #selector(touchUpInsideTriggered), for: .touchUpInside)
         
-        update()
+        setNeedsUpdateConfiguration()
     }
         
     public required init?(coder aDecoder: NSCoder) {
-        self.configuration = ButtonConfiguration()
+        let configuration = ButtonConfiguration()
+        self.baseConfiguration = configuration
+        self.effectiveConfiguration = configuration
+        self.configurationProvider = PlainButtonConfigurationProvider()
         super.init(coder: aDecoder)
         
-        update()
+        addTarget(self, action: #selector(touchUpInsideTriggered), for: .touchUpInside)
+        
+        setNeedsUpdateConfiguration()
     }
     
-    private func update() {
-        if shouldDisplayBackground {
-            backgroundView.configuration = configuration.background ?? BackgroundConfiguration()
-          
-            if !backgroundView.isDescendant(of: self) {
-                addSubview(backgroundView)
-                didAddBackgroundView = true
+    @objc private func touchUpInsideTriggered() {
+        touchUpInsideAction?(self)
+    }
+    
+    
+    // MARK: - Update
+    
+    // The configuration that represent the current UI state of the button.
+    open private(set) var effectiveConfiguration: ButtonConfiguration {
+        didSet {
+            guard effectiveConfiguration != oldValue else {
+                return
             }
-            sendSubviewToBack(backgroundView)
-        } else if didAddBackgroundView {
-            backgroundView.removeFromSuperview()
-            didAddBackgroundView = false
+            
+            if effectiveConfiguration.image != oldValue.image ||
+                effectiveConfiguration.title != oldValue.title ||
+                effectiveConfiguration.titleFont != oldValue.titleFont ||
+                effectiveConfiguration.attributedTitle != oldValue.attributedTitle ||
+                effectiveConfiguration.subtitle != oldValue.subtitle ||
+                effectiveConfiguration.subtitleFont != oldValue.subtitleFont ||
+                effectiveConfiguration.attributedSubtitle != oldValue.attributedSubtitle ||
+                effectiveConfiguration.showsActivityIndicator != oldValue.showsActivityIndicator ||
+                effectiveConfiguration.contentInsets != oldValue.contentInsets ||
+                effectiveConfiguration.imagePlacement != oldValue.imagePlacement ||
+                effectiveConfiguration.titleAlignment != oldValue.titleAlignment ||
+                effectiveConfiguration.contentInsets != oldValue.contentInsets ||
+                effectiveConfiguration.imagePadding != oldValue.imagePadding ||
+                effectiveConfiguration.titlePadding != oldValue.titlePadding {
+                
+                updateForeground()
+                layoutForeground()
+                
+                validFitSize = nil
+                invalidateIntrinsicContentSize()
+            }
+            
+            if effectiveConfiguration.background != oldValue.background {
+                updateBackground()
+                layoutBackground()
+            }
+            
+            if effectiveConfiguration.foregroundColor != oldValue.foregroundColor ||
+                effectiveConfiguration.titleColor != oldValue.titleColor ||
+                effectiveConfiguration.subtitleColor != oldValue.subtitleColor {
+                updateForegroundColors()
+            }
         }
+    }
+    
+    private lazy var updateTransaction = ButtonConfigurationUpdateTransaction { [weak self] in
+        guard let self = self else { return }
         
+        if self.needsUpdateConfiguration {
+            self.updateConfiguration()
+        }
+    }
+    
+    private var needsUpdateConfiguration: Bool = false
+    
+    /// Requests the view update its configuration for its current state. This method is called automatically when the button's state may have changed, as well as in other circumstances where an update may be required. Multiple requests may be coalesced into a single update at the appropriate time.
+    open func setNeedsUpdateConfiguration() {
+        needsUpdateConfiguration = true
+        
+        updateTransaction.commit()
+    }
+    
+    /// Update button's `effectiveConfiguration`,  this method should not be called directly, use `setNeedsUpdateConfiguration` to request an update.
+    open func updateConfiguration() {
+        effectiveConfiguration = configurationProvider?.configuration(for: self) ?? baseConfiguration
+        needsUpdateConfiguration = false
+    }
+    
+    private func updateBackground() {
+        if shouldDisplayBackground {
+            backgroundView.configuration = effectiveConfiguration.background ?? BackgroundConfiguration()
+        }
+    }
+    
+    /// Update foreground elements, except for color.
+    private func updateForeground() {
         var textAlignment: NSTextAlignment = .natural
         switch effectiveTitleAlignment {
         case .left:
@@ -211,57 +371,207 @@ public class ConfigurationBasedButton: UIControl {
         }
         
         if shouldDisplayImage {
-            imageView.image = configuration.image
-           
+            imageView.image = effectiveConfiguration.image
+        }
+        
+        if shouldDisplayActivityIndicator {
+            activityIndicatorView.startAnimating()
+        } else {
+            activityIndicatorView.stopAnimating()
+        }
+        
+        if shouldDisplayTitle {
+            if let attributedTitle = effectiveConfiguration.attributedTitle {
+                titleLabel.attributedText = attributedTitle
+            } else if let title = effectiveConfiguration.title {
+                titleLabel.text = title
+            }
+            titleLabel.font = effectiveConfiguration.titleFont
+            titleLabel.textAlignment = textAlignment
+        }
+        
+        if shouldDisplaySubtitle  {
+            if let attributedSubtitle = effectiveConfiguration.attributedSubtitle {
+                subtitleLabel.attributedText = attributedSubtitle
+            } else if let subtitle = effectiveConfiguration.subtitle {
+                subtitleLabel.text = subtitle
+            }
+            subtitleLabel.font = effectiveConfiguration.subtitleFont
+            subtitleLabel.textAlignment = textAlignment
+        }
+    }
+    
+    /// Update color of foreground elements.
+    private func updateForegroundColors() {
+        let theColor: UIColor = effectiveConfiguration.foregroundColor ?? tintColor
+      
+        if shouldDisplayImage {
+            imageView.tintColor = theColor
+        }
+        if shouldDisplayActivityIndicator {
+            activityIndicatorView.color = theColor
+        }
+        if shouldDisplayTitle {
+            titleLabel.textColor = effectiveConfiguration.titleColor ?? theColor
+        }
+        if shouldDisplaySubtitle {
+            subtitleLabel.textColor = effectiveConfiguration.subtitleColor ?? theColor
+        }
+    }
+    
+    
+    // MARK: - Layout
+    
+    // Determine the actual layout parameters based on configuration.
+    // Subclass can override the following getters to determine the layout.
+        
+    open var shouldDisplayBackground: Bool {
+        effectiveConfiguration.background != nil
+    }
+    
+    open var shouldDisplayImage: Bool {
+        effectiveConfiguration.showsActivityIndicator ? false : effectiveConfiguration.image != nil
+    }
+    
+    open var shouldDisplayActivityIndicator: Bool {
+        effectiveConfiguration.showsActivityIndicator
+    }
+    
+    open var shouldDisplayTitle: Bool {
+        if let attributedTitle = effectiveConfiguration.attributedTitle {
+            return attributedTitle.length > 0
+        }
+        if let title = effectiveConfiguration.title{
+            return !title.isEmpty
+        }
+        return false
+    }
+    open var shouldDisplaySubtitle: Bool {
+        if let attributedSubtitle = effectiveConfiguration.attributedSubtitle, attributedSubtitle.length > 0 {
+            return true
+        }
+        if let subtitle = effectiveConfiguration.subtitle, !subtitle.isEmpty {
+            return true
+        }
+        return false
+    }
+    
+    open var effectiveImagePlacement: ButtonConfiguration.ImagePlacement {
+        switch effectiveConfiguration.imagePlacement {
+        case .leading:
+            return layoutDirectionIsRTL ? .right : .left
+        case .trailing:
+            return layoutDirectionIsRTL ? .left : .right
+        default:
+            return effectiveConfiguration.imagePlacement
+        }
+    }
+    
+    open var effectiveTitleAlignment: ButtonConfiguration.TitleAlignment {
+        switch effectiveConfiguration.titleAlignment {
+        case .leading:
+            return layoutDirectionIsRTL ? .right : .left
+        case .trailing:
+            return layoutDirectionIsRTL ? .left : .right
+        case .automatic:
+            if shouldDisplayImage {
+                switch effectiveConfiguration.imagePlacement {
+                case .leading:
+                    return layoutDirectionIsRTL ? .right : .left
+                case .trailing:
+                    return layoutDirectionIsRTL ? .left : .right
+                case .top, .bottom:
+                    return .center
+                case .left:
+                    return .left
+                case .right:
+                    return .right
+                }
+            } else {
+                return layoutDirectionIsRTL ? .right : .left
+            }
+        default:
+            return effectiveConfiguration.titleAlignment
+        }
+    }
+    
+    open var effectiveContentInsets: UIEdgeInsets {
+        switch effectiveConfiguration.contentInsets {
+        case .directional(let insets):
+            return UIEdgeInsets(top: insets.top, left: layoutDirectionIsRTL ? insets.trailing : insets.leading, bottom: insets.bottom, right: layoutDirectionIsRTL ? insets.leading : insets.trailing)
+        case .nondirectional(let insets):
+            return insets
+        }
+    }
+    
+    open var layoutDirectionIsRTL: Bool {
+        effectiveUserInterfaceLayoutDirection == .rightToLeft
+    }
+    
+    
+    private var didAddBackgroundView = false
+    private var didAddImageView = false
+    private var didAddTitleView = false
+    private var didAddSubtitleView = false
+    private var didAddActivityIndicatorView = false
+    
+    private func layoutBackground() {
+        if shouldDisplayBackground {
+            self.backgroundView.frame = bounds
+          
+            if !backgroundView.isDescendant(of: self) {
+                addSubview(backgroundView)
+                didAddBackgroundView = true
+            }
+            sendSubviewToBack(backgroundView)
+        } else if didAddBackgroundView {
+            backgroundView.removeFromSuperview()
+            didAddBackgroundView = false
+        }
+    }
+    
+    private func layoutForeground() {
+        if shouldDisplayImage {
             if !imageView.isDescendant(of: self) {
                 addSubview(imageView)
-                didAddImageView = true
             }
+            didAddImageView = true
         } else if didAddImageView {
-            imageView.image = nil
             imageView.removeFromSuperview()
             didAddImageView = false
         }
         
+        if shouldDisplayActivityIndicator {
+            if !activityIndicatorView.isDescendant(of: self) {
+                addSubview(activityIndicatorView)
+            }
+            didAddActivityIndicatorView = true
+        } else if didAddActivityIndicatorView {
+            activityIndicatorView.removeFromSuperview()
+            didAddActivityIndicatorView = false
+        }
+        
         if shouldDisplayTitle {
-            titleLabel.text = configuration.title
-            titleLabel.textAlignment = textAlignment
-          
             if !titleLabel.isDescendant(of: self) {
                 addSubview(titleLabel)
-                didAddTitleView = true
             }
+            didAddTitleView = true
         } else if didAddTitleView {
-            titleLabel.text = nil
             titleLabel.removeFromSuperview()
             didAddTitleView = false
         }
         
         if shouldDisplaySubtitle  {
-            subtitleLabel.text = configuration.subtitle
-            subtitleLabel.textAlignment = textAlignment
-
             if !subtitleLabel.isDescendant(of: self) {
                 addSubview(subtitleLabel)
-                didAddSubtitleView = true
             }
+            didAddSubtitleView = true
         } else if didAddSubtitleView {
-            subtitleLabel.text = nil
             subtitleLabel.removeFromSuperview()
             didAddSubtitleView = false
         }
         
-        validFitSize = nil
-        setNeedsLayout()
-        invalidateIntrinsicContentSize()
-    }
-    
-    public override func layoutSubviews() {
-        super.layoutSubviews()
-        
-        self.backgroundView.frame = bounds
-        
-        // layout priority: image -> title -> subtitle
+        // layout priority: image/activityIndicator -> title -> subtitle
                 
         let effectiveImagePlacement = self.effectiveImagePlacement
         let effectiveTitleAlignment = self.effectiveTitleAlignment
@@ -270,14 +580,16 @@ public class ConfigurationBasedButton: UIControl {
 
         let contentSize = CGSize(width: bounds.width - effectiveContentInsets.left - effectiveContentInsets.right, height: bounds.height - effectiveContentInsets.top - effectiveContentInsets.bottom).eraseNegative()
 
+        let shouldDisplayActivityIndicator = self.shouldDisplayActivityIndicator
         let shouldDisplayImage = self.shouldDisplayImage
+        let shouldDisplayImageOrActivityIndicator = shouldDisplayActivityIndicator || shouldDisplayImage
         let shouldDisplayTitle = self.shouldDisplayTitle
         let shouldDisplaySubtitle = self.shouldDisplaySubtitle
     
-        let imagePadding = shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) ? configuration.imagePadding : 0
-        let titlePadding = shouldDisplayTitle && shouldDisplaySubtitle ? configuration.titlePadding : 0
+        let imagePadding = shouldDisplayImageOrActivityIndicator && (shouldDisplayTitle || shouldDisplaySubtitle) ? effectiveConfiguration.imagePadding : 0
+        let titlePadding = shouldDisplayTitle && shouldDisplaySubtitle ? effectiveConfiguration.titlePadding : 0
                 
-        var imageFrame = CGRect.zero
+        var imageOrActivityIndicatorFrame = CGRect.zero
         var titleFrame = CGRect.zero
         var subtitleFrame = CGRect.zero
         
@@ -285,29 +597,30 @@ public class ConfigurationBasedButton: UIControl {
         var titleLimitSize = CGSize.zero
         var subtitleLimitSize = CGSize.zero
         
-
-        if shouldDisplayImage {
-            imageLimitSize = contentSize
-            imageFrame.size = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
+        imageLimitSize = contentSize
+        if shouldDisplayActivityIndicator {
+            imageOrActivityIndicatorFrame.size = activityIndicatorView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
+        } else if shouldDisplayImage {
+            imageOrActivityIndicatorFrame.size = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
         }
         
         switch effectiveImagePlacement {
         case .top, .bottom:
             if shouldDisplayTitle {
-                titleLimitSize = CGSize(width: contentSize.width, height: contentSize.height - imageFrame.height - imagePadding).eraseNegative()
+                titleLimitSize = CGSize(width: contentSize.width, height: contentSize.height - imageOrActivityIndicatorFrame.height - imagePadding).eraseNegative()
                 titleFrame.size = titleLabel.sizeThatFits(titleLimitSize).limit(to: titleLimitSize)
             }
             if shouldDisplaySubtitle {
-                subtitleLimitSize = CGSize(width: contentSize.width, height: contentSize.height - imageFrame.height - imagePadding - titleFrame.height - titlePadding).eraseNegative()
+                subtitleLimitSize = CGSize(width: contentSize.width, height: contentSize.height - imageOrActivityIndicatorFrame.height - imagePadding - titleFrame.height - titlePadding).eraseNegative()
                 subtitleFrame.size = subtitleLabel.sizeThatFits(subtitleLimitSize).limit(to: subtitleLimitSize)
             }
 
             switch effectiveContentHorizontalAlignment {
             case .left:
-                let maxContentWidth = max(imageFrame.width, max(titleFrame.width, subtitleFrame.width))
+                let maxContentWidth = max(imageOrActivityIndicatorFrame.width, max(titleFrame.width, subtitleFrame.width))
                 
-                if shouldDisplayImage {
-                    imageFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - imageFrame.width) / 2
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - imageOrActivityIndicatorFrame.width) / 2
                 }
                 if shouldDisplayTitle {
                     titleFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - titleFrame.width) / 2
@@ -316,8 +629,8 @@ public class ConfigurationBasedButton: UIControl {
                     subtitleFrame.origin.x = effectiveContentInsets.left + (maxContentWidth - subtitleFrame.width) / 2
                 }
             case .center:
-                if shouldDisplayImage {
-                    imageFrame.origin.x = effectiveContentInsets.left + (imageLimitSize.width - imageFrame.width) / 2
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left + (imageLimitSize.width - imageOrActivityIndicatorFrame.width) / 2
                 }
                 if shouldDisplayTitle {
                     titleFrame.origin.x = effectiveContentInsets.left + (titleLimitSize.width - titleFrame.width) / 2
@@ -326,10 +639,10 @@ public class ConfigurationBasedButton: UIControl {
                     subtitleFrame.origin.x = effectiveContentInsets.left + (subtitleLimitSize.width - subtitleFrame.width) / 2
                 }
             case .right:
-                let maxContentWidth = max(imageFrame.width, max(titleFrame.width, subtitleFrame.width))
+                let maxContentWidth = max(imageOrActivityIndicatorFrame.width, max(titleFrame.width, subtitleFrame.width))
 
-                if shouldDisplayImage {
-                    imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width - (maxContentWidth - imageFrame.width) / 2
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.x = bounds.width - effectiveContentInsets.right - imageOrActivityIndicatorFrame.width - (maxContentWidth - imageOrActivityIndicatorFrame.width) / 2
                 }
                 if shouldDisplayTitle {
                     titleFrame.origin.x = bounds.width - effectiveContentInsets.right - titleFrame.width - (maxContentWidth - titleFrame.width) / 2
@@ -338,9 +651,9 @@ public class ConfigurationBasedButton: UIControl {
                     subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - subtitleFrame.width - (maxContentWidth - subtitleFrame.width) / 2
                 }
             case .fill:
-                if shouldDisplayImage {
-                    imageFrame.origin.x = effectiveContentInsets.left
-                    imageFrame.size.width = imageLimitSize.width
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left
+                    imageOrActivityIndicatorFrame.size.width = imageLimitSize.width
                 }
                 if shouldDisplayTitle {
                     titleFrame.origin.x = effectiveContentInsets.left
@@ -356,27 +669,27 @@ public class ConfigurationBasedButton: UIControl {
             if effectiveImagePlacement == .top {
                 switch contentVerticalAlignment {
                 case .top:
-                    if shouldDisplayImage {
-                        imageFrame.origin.y = effectiveContentInsets.top
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top
                     }
                     if shouldDisplayTitle {
-                        titleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding
+                        titleFrame.origin.y = effectiveContentInsets.top + imageOrActivityIndicatorFrame.height + imagePadding
                     }
                     if shouldDisplaySubtitle {
-                        subtitleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding + titleFrame.height + titlePadding
+                        subtitleFrame.origin.y = effectiveContentInsets.top + imageOrActivityIndicatorFrame.height + imagePadding + titleFrame.height + titlePadding
                     }
                 case .center:
-                    let contentHeight = imageFrame.height + imagePadding + titleFrame.height + titlePadding + subtitleFrame.height
+                    let contentHeight = imageOrActivityIndicatorFrame.height + imagePadding + titleFrame.height + titlePadding + subtitleFrame.height
                     let minY = effectiveContentInsets.top + (contentSize.height - contentHeight) / 2
                   
-                    if shouldDisplayImage {
-                        imageFrame.origin.y = minY
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = minY
                     }
                     if shouldDisplayTitle {
-                        titleFrame.origin.y = minY + imageFrame.height + imagePadding
+                        titleFrame.origin.y = minY + imageOrActivityIndicatorFrame.height + imagePadding
                     }
                     if shouldDisplaySubtitle {
-                        subtitleFrame.origin.y = minY + imageFrame.height + imagePadding + titleFrame.height + titlePadding
+                        subtitleFrame.origin.y = minY + imageOrActivityIndicatorFrame.height + imagePadding + titleFrame.height + titlePadding
                     }
                 case .bottom:
                     if shouldDisplaySubtitle {
@@ -385,26 +698,26 @@ public class ConfigurationBasedButton: UIControl {
                     if shouldDisplayTitle {
                         titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height
                     }
-                    if shouldDisplayImage {
-                        imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height - imagePadding - imageFrame.height
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height - imagePadding - imageOrActivityIndicatorFrame.height
                     }
                 case .fill:
-                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
+                    if shouldDisplayImageOrActivityIndicator && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
-                        imageFrame.origin.y = effectiveContentInsets.top
+                        imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top
                         if shouldDisplayTitle {
-                            titleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding
+                            titleFrame.origin.y = effectiveContentInsets.top + imageOrActivityIndicatorFrame.height + imagePadding
                             if !shouldDisplaySubtitle {
                                 titleFrame.size.height = max(bounds.height - titleFrame.minY - effectiveContentInsets.bottom, 0)
                             }
                         }
                         if shouldDisplaySubtitle {
-                            subtitleFrame.origin.y = effectiveContentInsets.top + imageFrame.height + imagePadding + titleFrame.height + titlePadding
+                            subtitleFrame.origin.y = effectiveContentInsets.top + imageOrActivityIndicatorFrame.height + imagePadding + titleFrame.height + titlePadding
                             subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - effectiveContentInsets.bottom, 0)
                         }
-                    } else if shouldDisplayImage {
-                        imageFrame.origin.y = effectiveContentInsets.top
-                        imageFrame.size.height = contentSize.height
+                    } else if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top
+                        imageOrActivityIndicatorFrame.size.height = contentSize.height
                     } else {
                         if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top
@@ -428,11 +741,11 @@ public class ConfigurationBasedButton: UIControl {
                     if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
                     }
-                    if shouldDisplayImage {
-                        imageFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding + subtitleFrame.height + imagePadding
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding + subtitleFrame.height + imagePadding
                     }
                 case .center:
-                    let contentHeight = imageFrame.height + imagePadding + titleFrame.height + titlePadding + subtitleFrame.height
+                    let contentHeight = imageOrActivityIndicatorFrame.height + imagePadding + titleFrame.height + titlePadding + subtitleFrame.height
                     let minY = effectiveContentInsets.top + (contentSize.height - contentHeight) / 2
                   
                     if shouldDisplayTitle {
@@ -441,36 +754,36 @@ public class ConfigurationBasedButton: UIControl {
                     if shouldDisplaySubtitle {
                         subtitleFrame.origin.y = minY + titleFrame.height + titlePadding
                     }
-                    if shouldDisplayImage {
-                        imageFrame.origin.y = minY + titleFrame.height + titlePadding + subtitleFrame.height + imagePadding
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = minY + titleFrame.height + titlePadding + subtitleFrame.height + imagePadding
                     }
                 case .bottom:
-                    if shouldDisplayImage {
-                        imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageOrActivityIndicatorFrame.height
                     }
                     if shouldDisplaySubtitle {
-                        subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height - imagePadding - subtitleFrame.height
+                        subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageOrActivityIndicatorFrame.height - imagePadding - subtitleFrame.height
                     }
                     if shouldDisplayTitle {
-                        titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height - imagePadding - subtitleFrame.height - titlePadding - titleFrame.height
+                        titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageOrActivityIndicatorFrame.height - imagePadding - subtitleFrame.height - titlePadding - titleFrame.height
                     }
                 case .fill:
-                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
+                    if shouldDisplayImageOrActivityIndicator && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
-                        imageFrame.origin.y = bounds.height - effectiveContentInsets.top - imageFrame.height
+                        imageOrActivityIndicatorFrame.origin.y = bounds.height - effectiveContentInsets.top - imageOrActivityIndicatorFrame.height
                         if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top
                             if !shouldDisplaySubtitle {
-                                titleFrame.size.height = max(bounds.height - titleFrame.minY - imagePadding - imageFrame.height - effectiveContentInsets.bottom, 0)
+                                titleFrame.size.height = max(bounds.height - titleFrame.minY - imagePadding - imageOrActivityIndicatorFrame.height - effectiveContentInsets.bottom, 0)
                             }
                         }
                         if shouldDisplaySubtitle {
                             subtitleFrame.origin.y = effectiveContentInsets.top + titleFrame.height + titlePadding
-                            subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - imagePadding - imageFrame.height - effectiveContentInsets.bottom, 0)
+                            subtitleFrame.size.height = max(bounds.height - subtitleFrame.minY - imagePadding - imageOrActivityIndicatorFrame.height - effectiveContentInsets.bottom, 0)
                         }
-                    } else if shouldDisplayImage {
-                        imageFrame.origin.y = effectiveContentInsets.top
-                        imageFrame.size.height = contentSize.height
+                    } else if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top
+                        imageOrActivityIndicatorFrame.size.height = contentSize.height
                     } else {
                         if shouldDisplayTitle {
                             titleFrame.origin.y = effectiveContentInsets.top
@@ -489,21 +802,21 @@ public class ConfigurationBasedButton: UIControl {
 
         case .left, .right:
             if shouldDisplayTitle {
-                titleLimitSize = CGSize(width: contentSize.width - imageFrame.width - imagePadding, height: contentSize.height).eraseNegative()
+                titleLimitSize = CGSize(width: contentSize.width - imageOrActivityIndicatorFrame.width - imagePadding, height: contentSize.height).eraseNegative()
                 titleFrame.size = titleLabel.sizeThatFits(titleLimitSize).limit(to: titleLimitSize)
             }
             if shouldDisplaySubtitle {
-                subtitleLimitSize = CGSize(width: contentSize.width - imageFrame.width - imagePadding, height: contentSize.height - titleFrame.height - titlePadding).eraseNegative()
+                subtitleLimitSize = CGSize(width: contentSize.width - imageOrActivityIndicatorFrame.width - imagePadding, height: contentSize.height - titleFrame.height - titlePadding).eraseNegative()
                 subtitleFrame.size = subtitleLabel.sizeThatFits(subtitleLimitSize).limit(to: subtitleLimitSize)
             }
             
             switch contentVerticalAlignment {
             case .top:
                 let titleTotalHeight = titleFrame.height + titlePadding + subtitleFrame.height
-                let maxContentHeight = max(imageFrame.height, titleTotalHeight)
+                let maxContentHeight = max(imageOrActivityIndicatorFrame.height, titleTotalHeight)
                 
-                if shouldDisplayImage {
-                    imageFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - imageFrame.height) / 2
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - imageOrActivityIndicatorFrame.height) / 2
                 }
                 if shouldDisplayTitle {
                     titleFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - titleTotalHeight) / 2
@@ -512,8 +825,8 @@ public class ConfigurationBasedButton: UIControl {
                     subtitleFrame.origin.y = effectiveContentInsets.top + (maxContentHeight - titleTotalHeight) / 2 + titleFrame.height + titlePadding
                 }
             case .center:
-                if shouldDisplayImage {
-                    imageFrame.origin.y = effectiveContentInsets.top + (contentSize.height - imageFrame.height) / 2
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top + (contentSize.height - imageOrActivityIndicatorFrame.height) / 2
                 }
                 
                 let titleTotalHeight = titleFrame.height + titlePadding + subtitleFrame.height
@@ -527,10 +840,10 @@ public class ConfigurationBasedButton: UIControl {
                 }
             case .bottom:
                 let titleTotalHeight = titleFrame.height + titlePadding + subtitleFrame.height
-                let maxContentHeight = max(imageFrame.height, titleTotalHeight)
+                let maxContentHeight = max(imageOrActivityIndicatorFrame.height, titleTotalHeight)
                 
-                if shouldDisplayImage {
-                    imageFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageFrame.height - (maxContentHeight - imageFrame.height) / 2
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.y = bounds.height - effectiveContentInsets.bottom - imageOrActivityIndicatorFrame.height - (maxContentHeight - imageOrActivityIndicatorFrame.height) / 2
                 }
                 if shouldDisplaySubtitle {
                     subtitleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - (maxContentHeight - titleTotalHeight) / 2
@@ -539,9 +852,9 @@ public class ConfigurationBasedButton: UIControl {
                     titleFrame.origin.y = bounds.height - effectiveContentInsets.bottom - subtitleFrame.height - titlePadding - titleFrame.height - (maxContentHeight - titleTotalHeight) / 2
                 }
             case .fill:
-                if shouldDisplayImage {
-                    imageFrame.origin.y = effectiveContentInsets.top
-                    imageFrame.size.height = contentSize.height
+                if shouldDisplayImageOrActivityIndicator {
+                    imageOrActivityIndicatorFrame.origin.y = effectiveContentInsets.top
+                    imageOrActivityIndicatorFrame.size.height = contentSize.height
                 }
                 if shouldDisplayTitle {
                     titleFrame.origin.y = effectiveContentInsets.top
@@ -559,31 +872,31 @@ public class ConfigurationBasedButton: UIControl {
             if effectiveImagePlacement == .left {
                 switch effectiveContentHorizontalAlignment {
                 case .left:
-                    if shouldDisplayImage {
-                        imageFrame.origin.x = effectiveContentInsets.left
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left
                     }
                     if shouldDisplayTitle {
-                        titleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
+                        titleFrame.origin.x = effectiveContentInsets.left + imageOrActivityIndicatorFrame.width + imagePadding
                     }
                     if shouldDisplaySubtitle {
-                        subtitleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
+                        subtitleFrame.origin.x = effectiveContentInsets.left + imageOrActivityIndicatorFrame.width + imagePadding
                     }
                 case .center:
-                    let contentWidth = imageFrame.width + imagePadding + max(titleFrame.width, subtitleFrame.width)
+                    let contentWidth = imageOrActivityIndicatorFrame.width + imagePadding + max(titleFrame.width, subtitleFrame.width)
                     let minX = effectiveContentInsets.left + (contentSize.width - contentWidth) / 2
                     
-                    if shouldDisplayImage {
-                        imageFrame.origin.x = minX
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = minX
                     }
                     if shouldDisplayTitle {
-                        titleFrame.origin.x = minX + imageFrame.width + imagePadding
+                        titleFrame.origin.x = minX + imageOrActivityIndicatorFrame.width + imagePadding
                     }
                     if shouldDisplaySubtitle {
-                        subtitleFrame.origin.x = minX + imageFrame.width + imagePadding
+                        subtitleFrame.origin.x = minX + imageOrActivityIndicatorFrame.width + imagePadding
                     }
                 case .right:
-                    if shouldDisplayImage {
-                        imageFrame.origin.x = bounds.width - effectiveContentInsets.right - max(titleFrame.width, subtitleFrame.width) - imagePadding - imageFrame.width
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = bounds.width - effectiveContentInsets.right - max(titleFrame.width, subtitleFrame.width) - imagePadding - imageOrActivityIndicatorFrame.width
                     }
                     if shouldDisplayTitle {
                         titleFrame.origin.x = bounds.width - effectiveContentInsets.right - titleFrame.width
@@ -592,20 +905,20 @@ public class ConfigurationBasedButton: UIControl {
                         subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - subtitleFrame.width
                     }
                 case .fill:
-                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
+                    if shouldDisplayImageOrActivityIndicator && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
-                        imageFrame.origin.x = effectiveContentInsets.left
+                        imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left
                         if shouldDisplayTitle {
-                            titleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
-                            titleFrame.size.width = contentSize.width - imagePadding - imageFrame.width
+                            titleFrame.origin.x = effectiveContentInsets.left + imageOrActivityIndicatorFrame.width + imagePadding
+                            titleFrame.size.width = contentSize.width - imagePadding - imageOrActivityIndicatorFrame.width
                         }
                         if shouldDisplaySubtitle {
-                            subtitleFrame.origin.x = effectiveContentInsets.left + imageFrame.width + imagePadding
-                            subtitleFrame.size.width = contentSize.width - imagePadding - imageFrame.width
+                            subtitleFrame.origin.x = effectiveContentInsets.left + imageOrActivityIndicatorFrame.width + imagePadding
+                            subtitleFrame.size.width = contentSize.width - imagePadding - imageOrActivityIndicatorFrame.width
                         }
-                    } else if shouldDisplayImage {
-                        imageFrame.origin.x = effectiveContentInsets.left
-                        imageFrame.size.width = contentSize.width
+                    } else if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left
+                        imageOrActivityIndicatorFrame.size.width = contentSize.width
                     } else {
                         if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left
@@ -627,11 +940,11 @@ public class ConfigurationBasedButton: UIControl {
                     if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = effectiveContentInsets.left
                     }
-                    if shouldDisplayImage {
-                        imageFrame.origin.x = effectiveContentInsets.left + max(titleFrame.width, subtitleFrame.width) + imagePadding
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left + max(titleFrame.width, subtitleFrame.width) + imagePadding
                     }
                 case .center:
-                    let contentWidth = imageFrame.width + imagePadding + max(titleFrame.width, subtitleFrame.width)
+                    let contentWidth = imageOrActivityIndicatorFrame.width + imagePadding + max(titleFrame.width, subtitleFrame.width)
                     let minX = effectiveContentInsets.left + (contentSize.width - contentWidth) / 2
                     
                     if shouldDisplayTitle {
@@ -640,34 +953,34 @@ public class ConfigurationBasedButton: UIControl {
                     if shouldDisplaySubtitle {
                         subtitleFrame.origin.x = minX
                     }
-                    if shouldDisplayImage {
-                        imageFrame.origin.x = minX + max(titleFrame.width, subtitleFrame.width) + imagePadding
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = minX + max(titleFrame.width, subtitleFrame.width) + imagePadding
                     }
                 case .right:
-                    if shouldDisplayImage {
-                        imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width
+                    if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = bounds.width - effectiveContentInsets.right - imageOrActivityIndicatorFrame.width
                     }
                     if shouldDisplayTitle {
-                        titleFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width - imagePadding - titleFrame.width
+                        titleFrame.origin.x = bounds.width - effectiveContentInsets.right - imageOrActivityIndicatorFrame.width - imagePadding - titleFrame.width
                     }
                     if shouldDisplaySubtitle {
-                        subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width - imagePadding - subtitleFrame.width
+                        subtitleFrame.origin.x = bounds.width - effectiveContentInsets.right - imageOrActivityIndicatorFrame.width - imagePadding - subtitleFrame.width
                     }
                 case .fill:
-                    if shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) {
+                    if shouldDisplayImageOrActivityIndicator && (shouldDisplayTitle || shouldDisplaySubtitle) {
                         // Layout image first, the remaining space is reserved for title
-                        imageFrame.origin.x = bounds.width - effectiveContentInsets.right - imageFrame.width
+                        imageOrActivityIndicatorFrame.origin.x = bounds.width - effectiveContentInsets.right - imageOrActivityIndicatorFrame.width
                         if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left
-                            titleFrame.size.width = imageFrame.minX - imagePadding - titleFrame.minX
+                            titleFrame.size.width = imageOrActivityIndicatorFrame.minX - imagePadding - titleFrame.minX
                         }
                         if shouldDisplaySubtitle {
                             subtitleFrame.origin.x = effectiveContentInsets.left
-                            subtitleFrame.size.width = imageFrame.minX - imagePadding - titleFrame.minX
+                            subtitleFrame.size.width = imageOrActivityIndicatorFrame.minX - imagePadding - titleFrame.minX
                         }
-                    } else if shouldDisplayImage {
-                        imageFrame.origin.x = effectiveContentInsets.left
-                        imageFrame.size.width = contentSize.width
+                    } else if shouldDisplayImageOrActivityIndicator {
+                        imageOrActivityIndicatorFrame.origin.x = effectiveContentInsets.left
+                        imageOrActivityIndicatorFrame.size.width = contentSize.width
                     } else {
                         if shouldDisplayTitle {
                             titleFrame.origin.x = effectiveContentInsets.left
@@ -717,9 +1030,10 @@ public class ConfigurationBasedButton: UIControl {
             }
         }
         
-        
-        if shouldDisplayImage {
-            imageView.frame = imageFrame
+        if shouldDisplayActivityIndicator {
+            activityIndicatorView.frame = imageOrActivityIndicatorFrame
+        } else if shouldDisplayImage {
+            imageView.frame = imageOrActivityIndicatorFrame
         }
         if shouldDisplayTitle {
             titleLabel.frame = titleFrame
@@ -729,55 +1043,80 @@ public class ConfigurationBasedButton: UIControl {
         }
     }
     
-    public override func updateConstraints() {
+    // MARK: - UI Elements
+    
+    private lazy var backgroundView: BackgroundView = {
+        let backgroundView = BackgroundView()
+        return backgroundView
+    }()
+    
+    private lazy var imageView: UIImageView = {
+        let imageView = UIImageView()
+        imageView.tintColor = effectiveConfiguration.foregroundColor ?? tintColor
+        imageView.contentMode = .scaleAspectFit
+        return imageView
+    }()
+    
+    private lazy var titleLabel: UILabel = {
+        let titleLabel = UILabel()
+        titleLabel.textColor = effectiveConfiguration.foregroundColor ?? tintColor
+        titleLabel.font = .preferredFont(forTextStyle: .headline)
+        titleLabel.numberOfLines = 0
+        return titleLabel
+    }()
+    
+    private lazy var subtitleLabel: UILabel = {
+        let subtitleLabel = UILabel()
+        subtitleLabel.textColor = effectiveConfiguration.foregroundColor ?? tintColor
+        subtitleLabel.font = .preferredFont(forTextStyle: .subheadline)
+        subtitleLabel.numberOfLines = 0
+        return subtitleLabel
+    }()
+    
+    private lazy var activityIndicatorView: UIActivityIndicatorView = {
+        let activityIndicatorView = UIActivityIndicatorView()
+        activityIndicatorView.color = effectiveConfiguration.foregroundColor ?? tintColor
+        return activityIndicatorView
+    }()
+    
+    
+    // MARK: - Size
+    
+    // Support for constraint-based layout (auto layout)
+    // If not nil, this is used when determining -intrinsicContentSize
+    open var preferredMaxLayoutWidthProvider: (() -> CGFloat)? {
+        didSet {
+            invalidateIntrinsicContentSize()
+        }
+    }
+    
+    private var validFitSize: CGSize?
+    private var isFittingSize: Bool = false
+    
+    open override func updateConstraints() {
         super.updateConstraints()
         invalidateIntrinsicContentSize()
     }
 
-    private var isCallingSystemLayoutSizeFitting = false
-    public override var intrinsicContentSize: CGSize {
-        // TODO:
-        
-//        var limitWidth: CGFloat?
-//        for constraint in constraintsAffectingLayout(for: .horizontal) {
-//            if constraint.firstItem === self && constraint.firstAttribute == .width && NSStringFromClass(type(of: constraint)) != "NSContentSizeLayoutConstraint"  {
-//                limitWidth = constraint.constant
-//            }
-//        }
-//        
-//        if let limitWidth = limitWidth {
-//            return sizeThatFits(CGSize(width: limitWidth, height: .greatestFiniteMagnitude))
-//        } else {
-//            return sizeThatFits(.max)
-//        }
-        
-        // Make instrinsic height adapt to constrained width.
-        //
-        // (1) If constrained width was set, call systemLayoutSizeFitting() can return the limit/constrained width, then use this width to calculate fit height (if the contrained height was not set, will use this height).
-        // (2) If not set, system will use instrinsic width, call systemLayoutSizeFitting() return the fit width (is result of sizeThatFits(CGSize.max))
-        
-//        if isCallingSystemLayoutSizeFitting {
-//            return sizeThatFits(CGSize.max)
-//        }
-//
-//        isCallingSystemLayoutSizeFitting = true
-//        var limitWidth = systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
-//        limitWidth = min(sizeThatFits(CGSize.max).width, limitWidth)
-//        isCallingSystemLayoutSizeFitting = false
-//
-//        return sizeThatFits(CGSize(width: limitWidth, height: CGFloat.greatestFiniteMagnitude))
+    open override var intrinsicContentSize: CGSize {
+        if let preferredMaxLayoutWidthProvider = preferredMaxLayoutWidthProvider {
+            let limitWidth = preferredMaxLayoutWidthProvider()
+            return sizeThatFits(CGSize(width: limitWidth, height: .greatestFiniteMagnitude))
+        } else {
+            return sizeThatFits(.max)
+        }
     }
     
-    private var isFittingSize: Bool = false
-    public override func sizeToFit() {
+    /// Always set the appropriate size.
+    open override func sizeToFit() {
         isFittingSize = true
         super.sizeToFit()
         isFittingSize = false
     }
     
-    public override func sizeThatFits(_ size: CGSize) -> CGSize {
+    open override func sizeThatFits(_ size: CGSize) -> CGSize {
         var limitSize = size
-        if bounds.size.equalTo(size) && isFittingSize { // Call sizeToFit(), always not limit size.
+        if bounds.size.equalTo(size) && isFittingSize {
             limitSize = CGSize.max
         }
         
@@ -788,17 +1127,19 @@ public class ConfigurationBasedButton: UIControl {
         
         var resultSize = CGSize.zero
         
+        let shouldDisplayActivityIndicator = self.shouldDisplayActivityIndicator
         let shouldDisplayImage = self.shouldDisplayImage
+        let shouldDisplayImageOrActivityIndicator = shouldDisplayActivityIndicator || shouldDisplayImage
         let shouldDisplayTitle = self.shouldDisplayTitle
         let shouldDisplaySubtitle = self.shouldDisplaySubtitle
         
-        let imagePadding = shouldDisplayImage && (shouldDisplayTitle || shouldDisplaySubtitle) ? configuration.imagePadding : 0
-        let titlePadding = shouldDisplayTitle && shouldDisplaySubtitle ? configuration.titlePadding : 0
+        let imagePadding = shouldDisplayImageOrActivityIndicator && (shouldDisplayTitle || shouldDisplaySubtitle) ? effectiveConfiguration.imagePadding : 0
+        let titlePadding = shouldDisplayTitle && shouldDisplaySubtitle ? effectiveConfiguration.titlePadding : 0
         
         let horizontalInset: CGFloat
         let verticalInset: CGFloat
         
-        switch configuration.contentInsets {
+        switch effectiveConfiguration.contentInsets {
         case .directional(let insets):
             horizontalInset = insets.leading + insets.trailing
             verticalInset = insets.top + insets.bottom
@@ -808,45 +1149,53 @@ public class ConfigurationBasedButton: UIControl {
         }
         
         let contentLimitSize = CGSize(width: limitSize.width - horizontalInset, height: limitSize.height - verticalInset).eraseNegative()
-        var imageSize = CGSize.zero
+        var imageOrActivityIndicatorSize = CGSize.zero
         var titleSize = CGSize.zero
         var subtitleSize = CGSize.zero
         
-        switch configuration.imagePlacement {
+        switch effectiveImagePlacement {
         case .top, .bottom:
-            if shouldDisplayImage {
-                let imageLimitSize = CGSize(width: contentLimitSize.width, height: CGFloat.greatestFiniteMagnitude)
-                imageSize = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
+            if shouldDisplayImageOrActivityIndicator {
+                let imageOrActivityIndicatorLimitSize = CGSize(width: contentLimitSize.width, height: CGFloat.greatestFiniteMagnitude)
+                if shouldDisplayActivityIndicator {
+                    imageOrActivityIndicatorSize = activityIndicatorView.sizeThatFits(imageOrActivityIndicatorLimitSize).limit(to: imageOrActivityIndicatorLimitSize)
+                } else if shouldDisplayImage {
+                    imageOrActivityIndicatorSize = imageView.sizeThatFits(imageOrActivityIndicatorLimitSize).limit(to: imageOrActivityIndicatorLimitSize)
+                }
             }
             if shouldDisplayTitle {
-                let titleLimitSize = CGSize(width: contentLimitSize.width, height: contentLimitSize.height - imageSize.height - imagePadding).eraseNegative()
+                let titleLimitSize = CGSize(width: contentLimitSize.width, height: contentLimitSize.height - imageOrActivityIndicatorSize.height - imagePadding).eraseNegative()
                 titleSize = titleLabel.sizeThatFits(titleLimitSize)
                 titleSize.height = min(titleSize.height, titleLimitSize.height)
             }
             if shouldDisplaySubtitle {
-                let subtitleLimitSize = CGSize(width: contentLimitSize.width, height: contentLimitSize.height - imageSize.height - imagePadding - titleSize.height - titlePadding).eraseNegative()
+                let subtitleLimitSize = CGSize(width: contentLimitSize.width, height: contentLimitSize.height - imageOrActivityIndicatorSize.height - imagePadding - titleSize.height - titlePadding).eraseNegative()
                 subtitleSize = subtitleLabel.sizeThatFits(subtitleLimitSize)
                 subtitleSize.height = min(subtitleSize.height, subtitleLimitSize.height)
             }
-            resultSize.width = horizontalInset + max(imageSize.width, max(titleSize.width, subtitleSize.width))
-            resultSize.height = verticalInset + imageSize.height + imagePadding + titleSize.height + titlePadding + subtitleSize.height
+            resultSize.width = horizontalInset + max(imageOrActivityIndicatorSize.width, max(titleSize.width, subtitleSize.width))
+            resultSize.height = verticalInset + imageOrActivityIndicatorSize.height + imagePadding + titleSize.height + titlePadding + subtitleSize.height
         case .left, .right, .leading, .trailing:
-            if shouldDisplayImage {
-                let imageLimitSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: contentLimitSize.height)
-                imageSize = imageView.sizeThatFits(imageLimitSize).limit(to: imageLimitSize)
+            if shouldDisplayImageOrActivityIndicator {
+                let imageOrActivityIndicatorLimitSize = CGSize(width: CGFloat.greatestFiniteMagnitude, height: contentLimitSize.height)
+                if shouldDisplayActivityIndicator {
+                    imageOrActivityIndicatorSize = activityIndicatorView.sizeThatFits(imageOrActivityIndicatorLimitSize).limit(to: imageOrActivityIndicatorLimitSize)
+                } else if shouldDisplayImage {
+                    imageOrActivityIndicatorSize = imageView.sizeThatFits(imageOrActivityIndicatorLimitSize).limit(to: imageOrActivityIndicatorLimitSize)
+                }
             }
             if shouldDisplayTitle {
-                let titleLimitSize = CGSize(width: contentLimitSize.width - imageSize.width - imagePadding, height: contentLimitSize.height).eraseNegative()
+                let titleLimitSize = CGSize(width: contentLimitSize.width - imageOrActivityIndicatorSize.width - imagePadding, height: contentLimitSize.height).eraseNegative()
                 titleSize = titleLabel.sizeThatFits(titleLimitSize)
                 titleSize.height = min(titleSize.height, titleLimitSize.height)
             }
             if shouldDisplaySubtitle {
-                let subtitleLimitSize = CGSize(width: contentLimitSize.width - imageSize.width - imagePadding, height: contentLimitSize.height).eraseNegative()
+                let subtitleLimitSize = CGSize(width: contentLimitSize.width - imageOrActivityIndicatorSize.width - imagePadding, height: contentLimitSize.height).eraseNegative()
                 subtitleSize = subtitleLabel.sizeThatFits(subtitleLimitSize)
                 subtitleSize.height = min(subtitleSize.height, subtitleLimitSize.height)
             }
-            resultSize.width = horizontalInset + imageSize.width + imagePadding + max(titleSize.width, subtitleSize.width)
-            resultSize.height = verticalInset + max(imageSize.height, titleSize.height + titlePadding + subtitleSize.height)
+            resultSize.width = horizontalInset + imageOrActivityIndicatorSize.width + imagePadding + max(titleSize.width, subtitleSize.width)
+            resultSize.height = verticalInset + max(imageOrActivityIndicatorSize.height, titleSize.height + titlePadding + subtitleSize.height)
         }
         
         if limitSize == CGSize.max {
@@ -854,6 +1203,75 @@ public class ConfigurationBasedButton: UIControl {
         }
         
         return resultSize
+    }
+    
+    
+    // MARK: - Override
+    
+    open override func removeTarget(_ target: Any?, action: Selector?, for controlEvents: UIControl.Event) {
+        super.removeTarget(target, action: action, for: controlEvents)
+        
+        // Prevent internal target-action from being removed
+        let sel = #selector(touchUpInsideTriggered)
+        if let actions = actions(forTarget: self, forControlEvent: .touchUpInside) {
+            if !actions.contains(NSStringFromSelector(sel)) {
+                addTarget(self, action: sel, for: .touchUpInside)
+            }
+        } else {
+            addTarget(self, action: sel, for: .touchUpInside)
+        }
+    }
+    
+    open override var isHighlighted: Bool {
+        didSet {
+            if isHighlighted != oldValue {
+                setNeedsUpdateConfiguration()
+            }
+        }
+    }
+    
+    open override var isEnabled: Bool {
+        didSet {
+            if isEnabled != oldValue {
+                setNeedsUpdateConfiguration()
+            }
+        }
+    }
+    
+    open override var isSelected: Bool {
+        didSet {
+            if isSelected != oldValue {
+                setNeedsUpdateConfiguration()
+            }
+        }
+    }
+    
+    open override func layoutSubviews() {
+        super.layoutSubviews()
+        
+        layoutBackground()
+        layoutForeground()
+    }
+    
+    open override func tintColorDidChange() {
+        super.tintColorDidChange()
+        updateForegroundColors()
+    }
+    
+    open override var contentVerticalAlignment: UIControl.ContentVerticalAlignment {
+        didSet {
+            if contentVerticalAlignment != oldValue {
+                setNeedsLayout()
+            }
+        }
+    }
+    
+    open override var contentHorizontalAlignment: UIControl.ContentHorizontalAlignment {
+        didSet {
+            if contentHorizontalAlignment != oldValue {
+                setNeedsLayout()
+            }
+        }
     }
 }
 
@@ -872,5 +1290,16 @@ private extension CGSize {
         result.width = Swift.max(result.width, 0)
         result.height = Swift.max(result.height, 0)
         return result
+    }
+}
+
+private extension UIColor {
+    func withOverlayAlpha(_ alpha: CGFloat) -> UIColor {
+        var originalAlpha: CGFloat = 0
+        if !self.getRed(nil, green: nil, blue: nil, alpha: &originalAlpha) {
+            originalAlpha = 0
+        }
+        
+        return self.withAlphaComponent(originalAlpha * alpha)
     }
 }

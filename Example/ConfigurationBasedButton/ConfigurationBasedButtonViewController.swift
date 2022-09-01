@@ -8,36 +8,100 @@
 import UIKit
 import ConfigurationBasedButton
 
+class EDStyleButtonConfigurationProvider: PlainButtonConfigurationProvider {
+    enum Style {
+    case primaryOutline
+    case primaryFilled
+    }
+    
+    private lazy var primaryOutlineConfiguration: ButtonConfiguration = {
+        var config = ButtonConfiguration()
+        config.contentInsets = .nondirectional(UIEdgeInsets(top: 10, left: 40, bottom: 10, right: 40))
+        config.foregroundColor = UIColor(named: "purple")
+        config.imagePadding = 10
+        config.background?.fillColor = UIColor.clear
+        config.background?.strokeColor = UIColor(named: "purple")
+        config.background?.strokeWidth = 1
+        config.background?.cornerStyle = .capsule
+        return config
+    }()
+    
+    private lazy var primaryFilledConfiguration: ButtonConfiguration = {
+        var config = ButtonConfiguration()
+        config.contentInsets = .nondirectional(UIEdgeInsets(top: 10, left: 40, bottom: 10, right: 40))
+        config.foregroundColor = UIColor.white
+        config.imagePadding = 10
+        config.background?.fillColor = UIColor(named: "purple")
+        config.background?.cornerStyle = .capsule
+        return config
+    }()
+    
+  
+    public let style: Style
+    
+    init(style: Style) {
+        self.style = style
+    }
+    
+    override func update(_ configuration: inout ButtonConfiguration, for button: ConfigurationBasedButton) {
+        switch style {
+        case .primaryOutline:
+            configuration.contentInsets = primaryOutlineConfiguration.contentInsets
+            configuration.foregroundColor = primaryOutlineConfiguration.foregroundColor
+            configuration.imagePadding = primaryOutlineConfiguration.imagePadding
+            configuration.background?.fillColor = primaryOutlineConfiguration.background?.fillColor
+            configuration.background?.strokeColor = primaryOutlineConfiguration.background?.strokeColor
+            configuration.background?.strokeWidth = primaryOutlineConfiguration.background?.strokeWidth ?? 1
+            configuration.background?.cornerStyle = primaryOutlineConfiguration.background?.cornerStyle
+        case .primaryFilled:
+            configuration.contentInsets = primaryFilledConfiguration.contentInsets
+            configuration.foregroundColor = primaryFilledConfiguration.foregroundColor
+            configuration.imagePadding = primaryFilledConfiguration.imagePadding
+            configuration.background?.fillColor = primaryFilledConfiguration.background?.fillColor
+            configuration.background?.strokeColor = primaryFilledConfiguration.background?.strokeColor
+            configuration.background?.strokeWidth = primaryFilledConfiguration.background?.strokeWidth ?? 1
+            configuration.background?.cornerStyle = primaryFilledConfiguration.background?.cornerStyle
+        }
+        super.update(&configuration, for: button)
+    }
+
+}
+
 class ConfigurationBasedButtonViewController: UIViewController {
     
     @IBOutlet weak var systemButton: UIButton!
     @IBOutlet var systemButtonWidthConstraint: NSLayoutConstraint!
     @IBOutlet var systemButtonHeightConstraint: NSLayoutConstraint!
     
-    
     @IBOutlet private var button: ConfigurationBasedButton! 
     @IBOutlet var buttonWidthConstraint: NSLayoutConstraint!
     @IBOutlet var buttonHeightConstraint: NSLayoutConstraint!
     
+    lazy var backgroundViewController: BackgroundViewController = {
+        let backgroundViewController = UIStoryboard(name: "Main", bundle: nil).instantiateViewController(withIdentifier: "BackgroundViewController") as! BackgroundViewController
+        backgroundViewController.apply = { [weak self] systemBg, bg in
+            if bg.cornerStyle == .capsule {
+                self?.systemButton.configuration?.cornerStyle = .capsule
+            }
+            self?.systemButton.configuration?.background = systemBg
+            self?.button.baseConfiguration.background = bg
+        }
+        return backgroundViewController;
+    }()
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        var configuration = button.configuration
+        let backgroundButtonBarItem = UIBarButtonItem(title: "background", style: .plain, target: self, action: #selector(configureBackground))
+        self.navigationItem.rightBarButtonItem = backgroundButtonBarItem
+        
+        var configuration = button.baseConfiguration
         configuration.title = "This's title"
         configuration.subtitle = "This's subtitle"
         let imageConfig = UIImage.SymbolConfiguration(pointSize: 28)
         let image = UIImage(systemName: "house.circle.fill", withConfiguration: imageConfig)
         configuration.image = image
-        
-        var bgConfig = BackgroundConfiguration()
-        bgConfig.fillColor = .cyan
-        bgConfig.strokeColor = .orange
-        bgConfig.strokeOutset = 10
-        bgConfig.strokeWidth = 1
-        configuration.background = bgConfig
-        
-        button.configuration = configuration
-        
+        button.baseConfiguration = configuration
         button.addTarget(self, action: #selector(buttonAction(sender:)), for: .touchUpInside)
         
         var systemButtonConfiguration = UIButton.Configuration.plain()
@@ -47,12 +111,18 @@ class ConfigurationBasedButtonViewController: UIViewController {
         systemButtonConfiguration.preferredSymbolConfigurationForImage = imageConfig
         systemButtonConfiguration.contentInsets = NSDirectionalEdgeInsets.zero
         systemButton.configuration = systemButtonConfiguration
+
+//        button.configurationProvider = EDStyleButtonConfigurationProvider(style: .primaryOutline)
+    }
+    
+    @objc func configureBackground() {
+        self.navigationController?.pushViewController(backgroundViewController, animated: true)
     }
     
     @IBAction func imagePlacementSegmentAction(sender: UISegmentedControl) {
-        button.configuration.imagePlacement = ButtonConfiguration.ImagePlacement(rawValue: sender.selectedSegmentIndex)!
+        button.baseConfiguration.imagePlacement = ButtonConfiguration.ImagePlacement(rawValue: sender.selectedSegmentIndex)!
         
-        switch button.configuration.imagePlacement {
+        switch button.baseConfiguration.imagePlacement {
         case .leading, .left:
             systemButton.configuration?.imagePlacement = .leading
         case .trailing, .right:
@@ -65,9 +135,9 @@ class ConfigurationBasedButtonViewController: UIViewController {
     }
     
     @IBAction func titleAlignmentSegmentAction(sender: UISegmentedControl) {
-        button.configuration.titleAlignment = ButtonConfiguration.TitleAlignment(rawValue: sender.selectedSegmentIndex)!
+        button.baseConfiguration.titleAlignment = ButtonConfiguration.TitleAlignment(rawValue: sender.selectedSegmentIndex)!
         
-        switch button.configuration.titleAlignment {
+        switch button.baseConfiguration.titleAlignment {
         case .automatic:
             systemButton.configuration?.titleAlignment = .automatic
         case .leading, .left:
@@ -97,9 +167,9 @@ class ConfigurationBasedButtonViewController: UIViewController {
             return
         }
         
-        button.configuration.imagePadding = CGFloat(truncating: number)
+        button.baseConfiguration.imagePadding = CGFloat(truncating: number)
         
-        systemButton.configuration?.imagePadding = button.configuration.imagePadding
+        systemButton.configuration?.imagePadding = button.baseConfiguration.imagePadding
     }
     
     @IBAction func titlePaddfingTextChanged(sender: UITextField) {
@@ -108,9 +178,9 @@ class ConfigurationBasedButtonViewController: UIViewController {
             return
         }
         
-        button.configuration.titlePadding = CGFloat(truncating: number)
+        button.baseConfiguration.titlePadding = CGFloat(truncating: number)
         
-        systemButton.configuration?.titlePadding = button.configuration.titlePadding
+        systemButton.configuration?.titlePadding = button.baseConfiguration.titlePadding
     }
     
     var latestImagePointSizeValue: CGFloat = 28
@@ -123,46 +193,51 @@ class ConfigurationBasedButtonViewController: UIViewController {
         latestImagePointSizeValue = CGFloat(truncating: number)
         let imageConfig = UIImage.SymbolConfiguration(pointSize: latestImagePointSizeValue)
         let image = UIImage(systemName: "house.circle.fill", withConfiguration: imageConfig)
-        button.configuration.image = image
+        button.baseConfiguration.image = image
         
         systemButton.configuration?.image = image
         systemButton.configuration?.preferredSymbolConfigurationForImage = imageConfig
     }
     
     @IBAction func titleTextChanged(sender: UITextField) {
-        button.configuration.title = sender.text
+        button.baseConfiguration.title = sender.text
         
         systemButton.configuration?.title = sender.text
     }
     
     @IBAction func subtitleTextChanged(sender: UITextField) {
-        button.configuration.subtitle = sender.text
+        button.baseConfiguration.subtitle = sender.text
         
         systemButton.configuration?.subtitle = sender.text
     }
     
     @IBAction func imageHiddenSwitchAction(sender: UISwitch) {
-        button.configuration.image = sender.isOn ? nil : UIImage(systemName: "house.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: latestImagePointSizeValue))
+        button.baseConfiguration.image = !sender.isOn ? nil : UIImage(systemName: "house.circle.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: latestImagePointSizeValue))
         
-        systemButton.configuration?.image = button.configuration.image
+        systemButton.configuration?.image = button.baseConfiguration.image
         systemButton.configuration?.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: latestImagePointSizeValue)
+    }
+    @IBAction func activityIndicatorHiddenSwitchAction(_ sender: UISwitch) {
+        button.baseConfiguration.showsActivityIndicator = sender.isOn
+        
+        systemButton.configuration?.showsActivityIndicator = sender.isOn
     }
     
     var latestContentInsetsIsDirectional = true
     @IBAction func contentInsetsSegmentAction(sender: UISegmentedControl) {
-        var updatedValue = button.configuration.contentInsets
+        var updatedValue = button.baseConfiguration.contentInsets
         if sender.selectedSegmentIndex == 0 {
-            if case .nondirectional(let insets) = button.configuration.contentInsets {
+            if case .nondirectional(let insets) = button.baseConfiguration.contentInsets {
                 updatedValue = .directional(NSDirectionalEdgeInsets(top: insets.top, leading: insets.left, bottom: insets.bottom, trailing: insets.right))
             }
             latestContentInsetsIsDirectional = true
         } else {
-            if case .directional(let insets) = button.configuration.contentInsets {
+            if case .directional(let insets) = button.baseConfiguration.contentInsets {
                 updatedValue = .nondirectional(UIEdgeInsets(top: insets.top, left: insets.leading, bottom: insets.bottom, right: insets.trailing))
             }
             latestContentInsetsIsDirectional = false
         }
-        button.configuration.contentInsets = updatedValue
+        button.baseConfiguration.contentInsets = updatedValue
     }
     
     @IBAction func contentInsetsTextChanged(sender: UITextField) {
@@ -179,9 +254,9 @@ class ConfigurationBasedButtonViewController: UIViewController {
         }
         
         if latestContentInsetsIsDirectional {
-            button.configuration.contentInsets = .directional(NSDirectionalEdgeInsets(top: values[0], leading: values[1], bottom: values[2], trailing: values[3]))
+            button.baseConfiguration.contentInsets = .directional(NSDirectionalEdgeInsets(top: values[0], leading: values[1], bottom: values[2], trailing: values[3]))
         } else {
-            button.configuration.contentInsets = .nondirectional(UIEdgeInsets(top: values[0], left: values[1], bottom: values[2], right: values[3]))
+            button.baseConfiguration.contentInsets = .nondirectional(UIEdgeInsets(top: values[0], left: values[1], bottom: values[2], right: values[3]))
         }
         
         systemButton.configuration?.contentInsets = NSDirectionalEdgeInsets(top: values[0], leading: values[1], bottom: values[2], trailing: values[3])
@@ -225,6 +300,11 @@ class ConfigurationBasedButtonViewController: UIViewController {
         
         systemButtonHeightConstraint.constant = buttonHeightConstraint.constant
         systemButton.setNeedsUpdateConstraints()
+    }
+    
+    @IBAction func enabledSwitchAction(_ sender: UISwitch) {
+        button.isEnabled = sender.isOn
+        systemButton.isEnabled = sender.isOn
     }
     
     @objc
