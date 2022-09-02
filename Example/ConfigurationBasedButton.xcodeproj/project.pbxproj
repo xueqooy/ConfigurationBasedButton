@@ -50,7 +50,7 @@
 		BB7FBC8B0795F88E698227D5 /* Pods-ConfigurationBasedButton_Example.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ConfigurationBasedButton_Example.release.xcconfig"; path = "Target Support Files/Pods-ConfigurationBasedButton_Example/Pods-ConfigurationBasedButton_Example.release.xcconfig"; sourceTree = "<group>"; };
 		CD3438F8B33DF6ADD22554C8 /* LICENSE */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; name = LICENSE; path = ../LICENSE; sourceTree = "<group>"; };
 		DB7EAFE943082EFF88E8B024 /* Pods-ConfigurationBasedButton_Tests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ConfigurationBasedButton_Tests.release.xcconfig"; path = "Target Support Files/Pods-ConfigurationBasedButton_Tests/Pods-ConfigurationBasedButton_Tests.release.xcconfig"; sourceTree = "<group>"; };
-		EC4BBCEC67AFE9ADAB9E4050 /* ConfigurationBasedButton.podspec */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; name = ConfigurationBasedButton.podspec; path = ../ConfigurationBasedButton.podspec; sourceTree = "<group>"; };
+		EC4BBCEC67AFE9ADAB9E4050 /* ConfigurationBasedButton.podspec */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; name = ConfigurationBasedButton.podspec; path = ../ConfigurationBasedButton.podspec; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.ruby; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */

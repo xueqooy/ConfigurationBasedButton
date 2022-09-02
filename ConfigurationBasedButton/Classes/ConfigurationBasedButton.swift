@@ -7,55 +7,24 @@
 
 import UIKit
 
-private class ButtonConfigurationUpdateTransaction {
-   
-    private static var observer: CFRunLoopObserver?
-    private static var transactionSet: Set<ButtonConfigurationUpdateTransaction>?
-    private static func setupMainRunloopObserverIfNecessary() {
-        if let _ = observer {
-            return
-        }
-        
-        transactionSet = Set<ButtonConfigurationUpdateTransaction>()
-        
-        observer = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, CFRunLoopActivity.beforeWaiting.rawValue | CFRunLoopActivity.exit.rawValue, true, 0) { _, _ in
-            guard let currentSet = transactionSet, !currentSet.isEmpty else { return }
-            transactionSet?.removeAll()
-            
-            currentSet.forEach { transaction in
-                transaction.block()
-            }
-            
-        }
-        if let observer = observer {
-            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, CFRunLoopMode.defaultMode)
-        }
-    }
-    
-    
-    private let block: () -> Void
-    
-    public init(_ block: @escaping () -> Void) {
-        self.block = block
-    }
-    
-    func commit() {
-        Self.setupMainRunloopObserverIfNecessary()
-        Self.transactionSet?.insert(self)
-    }
 
+public protocol ButtonActivityIndicatorType: UIView {
+    var indicatorColor: UIColor? { get set }
+    
+    func startAnimating()
+    func stopAnimating()
 }
 
-extension ButtonConfigurationUpdateTransaction: Hashable {
-    public static func == (lhs: ButtonConfigurationUpdateTransaction, rhs: ButtonConfigurationUpdateTransaction) -> Bool {
-        return lhs === rhs
-    }
-
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(ObjectIdentifier(self))
+extension UIActivityIndicatorView: ButtonActivityIndicatorType {
+    public var indicatorColor: UIColor? {
+        get {
+            color
+        }
+        set {
+            color = newValue
+        }
     }
 }
-
 
 public enum EdgeInsets {
     case directional(NSDirectionalEdgeInsets), nondirectional(UIEdgeInsets)
@@ -252,7 +221,6 @@ open class ConfigurationBasedButton: UIControl {
     
     /// The convenience for `touchUpInside` action.
     open var touchUpInsideAction: ((ConfigurationBasedButton) -> Void)?
-    
 
     public init(baseConfiguration: ButtonConfiguration = ButtonConfiguration(), configurationProvider: ButtonConfigurationProviderType? = PlainButtonConfigurationProvider(), touchUpInsideAction: ((ConfigurationBasedButton) -> Void)? = nil) {
         self.baseConfiguration = baseConfiguration
@@ -310,9 +278,6 @@ open class ConfigurationBasedButton: UIControl {
                 
                 updateForeground()
                 layoutForeground()
-                
-                validFitSize = nil
-                invalidateIntrinsicContentSize()
             }
             
             if effectiveConfiguration.background != oldValue.background {
@@ -376,8 +341,6 @@ open class ConfigurationBasedButton: UIControl {
         
         if shouldDisplayActivityIndicator {
             activityIndicatorView.startAnimating()
-        } else {
-            activityIndicatorView.stopAnimating()
         }
         
         if shouldDisplayTitle {
@@ -409,7 +372,7 @@ open class ConfigurationBasedButton: UIControl {
             imageView.tintColor = theColor
         }
         if shouldDisplayActivityIndicator {
-            activityIndicatorView.color = theColor
+            activityIndicatorView.indicatorColor = theColor
         }
         if shouldDisplayTitle {
             titleLabel.textColor = effectiveConfiguration.titleColor ?? theColor
@@ -547,6 +510,7 @@ open class ConfigurationBasedButton: UIControl {
             }
             didAddActivityIndicatorView = true
         } else if didAddActivityIndicatorView {
+            activityIndicatorView.stopAnimating()
             activityIndicatorView.removeFromSuperview()
             didAddActivityIndicatorView = false
         }
@@ -1041,9 +1005,42 @@ open class ConfigurationBasedButton: UIControl {
         if shouldDisplaySubtitle {
             subtitleLabel.frame = subtitleFrame
         }
+        
+        validFitSize = nil
+        invalidateIntrinsicContentSize()
     }
     
     // MARK: - UI Elements
+    
+    /// After setting, it can only be called once at most, reassign to refresh the indicator.
+    /// A nil value uses `UIActivityIndicatorView`
+    open var activityIndicatorProvider: (() -> ButtonActivityIndicatorType)? {
+        didSet {
+            if oldValue == nil && activityIndicatorProvider == nil { return }
+            
+            currentActivityIndicatorView?.removeFromSuperview()
+            currentActivityIndicatorView = nil
+            
+            if shouldDisplayActivityIndicator {
+                updateForeground()
+                layoutForeground()
+            }
+        }
+    }
+    
+    private var currentActivityIndicatorView: ButtonActivityIndicatorType?
+    
+    private var activityIndicatorView: ButtonActivityIndicatorType {
+        if let currentActivityIndicatorView = currentActivityIndicatorView {
+            return currentActivityIndicatorView
+        }
+        
+        let activityIndicatorView = activityIndicatorProvider?() ?? UIActivityIndicatorView()
+        activityIndicatorView.indicatorColor = effectiveConfiguration.foregroundColor ?? tintColor
+        currentActivityIndicatorView = activityIndicatorView
+        return activityIndicatorView
+    }
+    
     
     private lazy var backgroundView: BackgroundView = {
         let backgroundView = BackgroundView()
@@ -1069,12 +1066,6 @@ open class ConfigurationBasedButton: UIControl {
         subtitleLabel.textColor = effectiveConfiguration.foregroundColor ?? tintColor
         subtitleLabel.numberOfLines = 0
         return subtitleLabel
-    }()
-    
-    private lazy var activityIndicatorView: UIActivityIndicatorView = {
-        let activityIndicatorView = UIActivityIndicatorView()
-        activityIndicatorView.color = effectiveConfiguration.foregroundColor ?? tintColor
-        return activityIndicatorView
     }()
     
     
@@ -1273,6 +1264,58 @@ open class ConfigurationBasedButton: UIControl {
     }
 }
 
+
+private class ButtonConfigurationUpdateTransaction {
+   
+    private static var observer: CFRunLoopObserver?
+    private static var transactionSet: Set<ButtonConfigurationUpdateTransaction>?
+    private static func setupMainRunloopObserverIfNecessary() {
+        if let _ = observer {
+            return
+        }
+        
+        transactionSet = Set<ButtonConfigurationUpdateTransaction>()
+        
+        observer = CFRunLoopObserverCreateWithHandler(kCFAllocatorDefault, CFRunLoopActivity.beforeWaiting.rawValue | CFRunLoopActivity.exit.rawValue, true, 0) { _, _ in
+            guard let currentSet = transactionSet, !currentSet.isEmpty else { return }
+            transactionSet?.removeAll()
+            
+            currentSet.forEach { transaction in
+                transaction.block()
+            }
+            
+        }
+        if let observer = observer {
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, CFRunLoopMode.defaultMode)
+        }
+    }
+    
+    
+    private let block: () -> Void
+    
+    public init(_ block: @escaping () -> Void) {
+        self.block = block
+    }
+    
+    func commit() {
+        Self.setupMainRunloopObserverIfNecessary()
+        Self.transactionSet?.insert(self)
+    }
+
+}
+
+
+extension ButtonConfigurationUpdateTransaction: Hashable {
+    public static func == (lhs: ButtonConfigurationUpdateTransaction, rhs: ButtonConfigurationUpdateTransaction) -> Bool {
+        return lhs === rhs
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(ObjectIdentifier(self))
+    }
+}
+
+
 private extension CGSize {
     static let max = CGSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     
@@ -1301,3 +1344,4 @@ private extension UIColor {
         return self.withAlphaComponent(originalAlpha * alpha)
     }
 }
+

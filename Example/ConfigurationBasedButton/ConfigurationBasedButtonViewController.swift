@@ -8,7 +8,7 @@
 import UIKit
 import ConfigurationBasedButton
 
-class EDStyleButtonConfigurationProvider: PlainButtonConfigurationProvider {
+class MyStyleButtonConfigurationProvider: PlainButtonConfigurationProvider {
     enum Style {
     case primaryOutline
     case primaryFilled
@@ -64,8 +64,26 @@ class EDStyleButtonConfigurationProvider: PlainButtonConfigurationProvider {
         }
         super.update(&configuration, for: button)
     }
-
 }
+
+
+class MyButtonActivityIndicatorView: UIView, ButtonActivityIndicatorType {
+    
+    var indicatorColor: UIColor?
+    
+    func startAnimating() {
+        print("start animating")
+    }
+    
+    func stopAnimating() {
+        print("stop animating")
+    }
+    
+    override func sizeThatFits(_ size: CGSize) -> CGSize {
+        return CGSize(width: 30, height: 30)
+    }
+}
+
 
 class ConfigurationBasedButtonViewController: UIViewController {
     
@@ -94,7 +112,7 @@ class ConfigurationBasedButtonViewController: UIViewController {
         
         let backgroundButtonBarItem = UIBarButtonItem(title: "background", style: .plain, target: self, action: #selector(configureBackground))
         self.navigationItem.rightBarButtonItem = backgroundButtonBarItem
-        
+
         var configuration = button.baseConfiguration
         configuration.title = "This's title"
         configuration.subtitle = "This's subtitle"
@@ -103,7 +121,7 @@ class ConfigurationBasedButtonViewController: UIViewController {
         configuration.image = image
         button.baseConfiguration = configuration
         button.addTarget(self, action: #selector(buttonAction(sender:)), for: .touchUpInside)
-        
+
         var systemButtonConfiguration = UIButton.Configuration.plain()
         systemButtonConfiguration.title = "This's title"
         systemButtonConfiguration.subtitle = "This's subtitle"
@@ -112,9 +130,51 @@ class ConfigurationBasedButtonViewController: UIViewController {
         systemButtonConfiguration.contentInsets = NSDirectionalEdgeInsets.zero
         systemButton.configuration = systemButtonConfiguration
         
-//        button.baseConfiguration.foregroundColor = .white
+        
+        button.activityIndicatorProvider = {
+            let view = MyButtonActivityIndicatorView()
+            view.backgroundColor = UIColor.red
+            return view
+        }
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+            self.button.acti = nil
+        }
+        
+//      button.configurationProvider = MyStyleButtonConfigurationProvider(style: .primaryOutline)
+        
+        // Create base configuration.
+//        var baseConfiguration = ButtonConfiguration()
+//        baseConfiguration.title = "Title"
+//        baseConfiguration.subtitle = "Subtitle"
+//        baseConfiguration.image = UIImage(systemName: "house.circle.fill")
+//        baseConfiguration.imagePadding = 10
+//        baseConfiguration.contentInsets = .nondirectional(.init(top: 10, left: 40, bottom: 10, right: 40))
 //
-//        button.configurationProvider = EDStyleButtonConfigurationProvider(style: .primaryOutline)
+//        // Create plain-style configuration provider.
+//        let configurationProvider = PlainButtonConfigurationProvider()
+//
+//        // Create button1 with baseConfiguration, configurationProvider and action for `touchUpInside`.
+//        let button1 = ConfigurationBasedButton(baseConfiguration: baseConfiguration, configurationProvider: configurationProvider) { _ in
+//            print("Button1 has been tapped")
+//        }
+//
+//        // Create button2 with button1's base configuration.
+//        let button2 = ConfigurationBasedButton()
+//        button2.baseConfiguration = button1.baseConfiguration
+//
+//        // Create button3 with current button1's effective configuration.
+//        button1.isHighlighted = true
+//        let button3 = ConfigurationBasedButton(baseConfiguration: button1.effectiveConfiguration)
+//
+//        // Update configuration.
+//        // The UI will not be updated immediately, multiple requests may be coalesced into a single update at the appropriate time.
+//        button1.baseConfiguration.title = "Update Title"
+//        button1.baseConfiguration.image = nil
+//        button1.baseConfiguration.background?.fillColor = UIColor.white
+//        button1.baseConfiguration.background?.cornerStyle = .capsule
+        
+        
     }
     
     @objc func configureBackground() {
