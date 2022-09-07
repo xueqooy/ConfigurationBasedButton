@@ -31,6 +31,12 @@ public struct BackgroundConfiguration {
     public var image: UIImage?
     /// The content mode to use when rendering the image. Default is UIViewContentModeScaleToFill.
     public var imageContentMode: UIView.ContentMode = .scaleToFill
+    /// offset in user space of the shadow
+    public var shadowOffset: CGSize = .zero
+    /// blur radius of the shadow in default user space units
+    public var shadowBlurRadius: CGFloat = 3
+    /// color used for the shadow
+    public var shadowColor: UIColor?
     
     public init() {}
 }
@@ -39,20 +45,29 @@ extension BackgroundConfiguration: Equatable {}
 
 public class BackgroundView: UIView {
     
+    private lazy var shadowView: UIView = {
+        let shadowView = UIView()
+        shadowView.isUserInteractionEnabled = false
+        return shadowView
+    }()
+    
     private lazy var colorView: UIView = {
         let colorView = UIView()
+        colorView.isUserInteractionEnabled = false
         colorView.clipsToBounds = true
         return colorView
     }()
     
     private lazy var visualEffectView: UIVisualEffectView = {
         let visualEffectView = UIVisualEffectView()
+        visualEffectView.isUserInteractionEnabled = false
         visualEffectView.contentView.clipsToBounds = true
         return visualEffectView
     }()
         
     private lazy var imageView: UIImageView = {
         let imageView = UIImageView()
+        imageView.isUserInteractionEnabled = false
         imageView.clipsToBounds = true
         return imageView
     }()
@@ -61,14 +76,20 @@ public class BackgroundView: UIView {
 
     private lazy var strokeView: UIView = {
         let strokeView = UIView()
+        strokeView.isUserInteractionEnabled = false
         strokeView.clipsToBounds = true
         return strokeView
     }()
     
+    private var didAddShadowView: Bool = false
     private var didAddColorView: Bool = false
     private var didAddVisualEffectView: Bool = false
     private var didAddStrokeView: Bool = false
     private var didAddImageView: Bool = false
+    
+    private var shouldDisplayShadowView: Bool {
+        configuration.shadowColor != nil
+    }
     
     private var shouldDisplayColorView: Bool {
         if configuration.visualEffect != nil {
@@ -98,6 +119,7 @@ public class BackgroundView: UIView {
         didSet {
             if configuration != oldValue {
                 update()
+                layout()
             }
         }
     }
@@ -118,23 +140,95 @@ public class BackgroundView: UIView {
         update()
     }
     
-    public func update() {
+    public override func layoutSubviews() {
+        super.layoutSubviews()
+    
+        layout()
+    }
+    
+    public override func willRemoveSubview(_ subview: UIView) {
+        super.willRemoveSubview(subview)
+        
+        if shouldDisplayCustomView && configuration.customView == subview {
+            assertionFailure("The configured customView cannot be removed, please use 'self.configuration.customView = nil' instead")
+        }
+    }
+    
+    private func update() {
+        if shouldDisplayShadowView {
+            shadowView.layer.shadowColor = configuration.shadowColor?.cgColor
+            shadowView.layer.shadowOffset = configuration.shadowOffset
+            shadowView.layer.shadowRadius = configuration.shadowBlurRadius
+            shadowView.layer.shadowOpacity = 1
+        }
+        
         if shouldDisplayColorView {
             colorView.backgroundColor = configuration.fillColor
+        }
+        
+        if shouldDisplayVisualEffectView {
+            visualEffectView.contentView.backgroundColor = configuration.fillColor
+            visualEffectView.effect = configuration.visualEffect
+        }
+        
+        if shouldDisplayImageView {
+            imageView.contentMode = configuration.imageContentMode
+            imageView.image = configuration.image
+        }
+        
+        if shouldDisplayCustomView {
+            customView = configuration.customView
+            configuration.customView?.clipsToBounds = true
+        }
+        
+        if shouldDisplayStrokeView {
+            strokeView.layer.borderColor = configuration.strokeColor?.cgColor ?? self.tintColor.cgColor
+            strokeView.layer.borderWidth = configuration.strokeWidth
+        }
+    }
+    
+    private func layout() {
+        
+        var cornerRadius: CGFloat = 0
+        if let cornerStyle = configuration.cornerStyle {
+            switch cornerStyle {
+            case .fixed(let value):
+                cornerRadius = value
+            case .capsule:
+                cornerRadius = min(bounds.height, bounds.width) / 2.0
+            }
+        }
+        
+        if shouldDisplayShadowView {
+            shadowView.frame = bounds
+            shadowView.layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: cornerRadius).cgPath
+            
+            if !shadowView.isDescendant(of: self) {
+                addSubview(shadowView)
+                didAddShadowView = true
+            }
+        } else if didAddShadowView {
+            shadowView.removeFromSuperview()
+            didAddShadowView = false
+        }
+        
+        if shouldDisplayColorView {
+            colorView.frame = bounds
+            colorView.layer.cornerRadius = cornerRadius
             
             if !colorView.isDescendant(of: self) {
                 addSubview(colorView)
                 didAddColorView = true
             }
-            sendSubviewToBack(colorView)
+            bringSubviewToFront(colorView)
         } else if didAddColorView {
             colorView.removeFromSuperview()
             didAddColorView = false
         }
         
         if shouldDisplayVisualEffectView {
-            visualEffectView.contentView.backgroundColor = configuration.fillColor
-            visualEffectView.effect = configuration.visualEffect
+            visualEffectView.frame = bounds
+            visualEffectView.subviews.forEach { $0.layer.cornerRadius = cornerRadius }
             
             if !visualEffectView.isDescendant(of: self) {
                 addSubview(visualEffectView)
@@ -147,9 +241,9 @@ public class BackgroundView: UIView {
         }
         
         if shouldDisplayImageView {
-            imageView.contentMode = configuration.imageContentMode
-            imageView.image = configuration.image
-           
+            imageView.frame = bounds
+            imageView.layer.cornerRadius = cornerRadius
+            
             if !imageView.isDescendant(of: self) {
                 addSubview(imageView)
                 didAddImageView = true
@@ -161,9 +255,9 @@ public class BackgroundView: UIView {
         }
         
         if shouldDisplayCustomView {
-            customView = configuration.customView
-            configuration.customView?.clipsToBounds = true
-          
+            customView?.frame = bounds
+            customView?.layer.cornerRadius = cornerRadius
+            
             if let customView = customView {
                 if !customView.isDescendant(of: self) {
                     addSubview(customView)
@@ -176,8 +270,11 @@ public class BackgroundView: UIView {
         }
         
         if shouldDisplayStrokeView {
-            strokeView.layer.borderColor = configuration.strokeColor?.cgColor ?? self.tintColor.cgColor
-            strokeView.layer.borderWidth = configuration.strokeWidth
+            let outset = configuration.strokeOutset
+            strokeView.frame = bounds.inset(by: UIEdgeInsets(top: -outset, left: -outset, bottom: -outset, right: -outset))
+            if cornerRadius > 0 {
+                strokeView.layer.cornerRadius = cornerRadius + outset
+            }
             
             if !strokeView.isDescendant(of: self) {
                 addSubview(strokeView)
@@ -187,49 +284,6 @@ public class BackgroundView: UIView {
         } else if didAddStrokeView {
             strokeView.removeFromSuperview()
             didAddStrokeView = false
-        }
-        
-    }
-    
-    public override func layoutSubviews() {
-        super.layoutSubviews()
-    
-        var cornerRadius: CGFloat = 0
-        if let cornerStyle = configuration.cornerStyle {
-            switch cornerStyle {
-            case .fixed(let value):
-                cornerRadius = value
-            case .capsule:
-                cornerRadius = min(bounds.height, bounds.width) / 2.0
-            }
-        }
-        
-        if shouldDisplayColorView {
-            colorView.frame = bounds
-            colorView.layer.cornerRadius = cornerRadius
-        }
-        
-        if shouldDisplayVisualEffectView {
-            visualEffectView.frame = bounds
-            visualEffectView.subviews.forEach { $0.layer.cornerRadius = cornerRadius }
-        }
-        
-        if shouldDisplayStrokeView {
-            imageView.frame = bounds
-            imageView.layer.cornerRadius = cornerRadius
-        }
-        
-        if shouldDisplayCustomView {
-            customView?.frame = bounds
-            customView?.layer.cornerRadius = cornerRadius
-        }
-        
-        if shouldDisplayStrokeView {
-            let outset = configuration.strokeOutset
-            strokeView.frame = bounds.inset(by: UIEdgeInsets(top: -outset, left: -outset, bottom: -outset, right: -outset))
-            if cornerRadius > 0 {
-                strokeView.layer.cornerRadius = cornerRadius + outset
-            }
         }
     }
     

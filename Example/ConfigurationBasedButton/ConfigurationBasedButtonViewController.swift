@@ -130,17 +130,8 @@ class ConfigurationBasedButtonViewController: UIViewController {
         systemButtonConfiguration.contentInsets = NSDirectionalEdgeInsets.zero
         systemButton.configuration = systemButtonConfiguration
         
-        
-        button.activityIndicatorProvider = {
-            let view = MyButtonActivityIndicatorView()
-            view.backgroundColor = UIColor.red
-            return view
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-            self.button.acti = nil
-        }
-        
+        button.baseConfiguration.foregroundColor = UIColor.white
+         
 //      button.configurationProvider = MyStyleButtonConfigurationProvider(style: .primaryOutline)
         
         // Create base configuration.

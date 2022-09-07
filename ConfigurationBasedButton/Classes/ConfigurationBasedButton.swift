@@ -45,7 +45,7 @@ public struct ButtonConfiguration {
     }
     
     public var image: UIImage?
-    
+
     public var title: String?
     public var titleFont: UIFont?
     public var titleColor: UIColor?
@@ -74,7 +74,7 @@ public struct ButtonConfiguration {
     /// A BackgroundConfiguration describing the button's background.
     public var background: BackgroundConfiguration? = BackgroundConfiguration()
     
-    /// The base color to use for background elements.
+    /// The base color to use for foreground elements.
     public var foregroundColor: UIColor?
 
     public init() {
@@ -168,15 +168,15 @@ open class PlainButtonConfigurationProvider: ButtonConfigurationProviderType {
         case .normal:
             return nil
         case .disabled:
-            return 0.35
+            return 0.5
         case .highlighted:
             return 0.75
         }
     }
     
-    /// Modify the colors of configuration.
     open func update(_ configuration: inout ButtonConfiguration, for button: ConfigurationBasedButton) {
-        if let overlayAlpha = overlayAlpha(for: State.state(from: button)) {
+        let state = State.state(from: button)
+        if let overlayAlpha = overlayAlpha(for: state) {
             if let forgroundColor = configuration.foregroundColor ?? button.tintColor {
                 configuration.foregroundColor = forgroundColor.withOverlayAlpha(overlayAlpha)
             }
@@ -196,6 +196,10 @@ open class PlainButtonConfigurationProvider: ButtonConfigurationProviderType {
             if let backgroundStrokeColor = configuration.background?.strokeColor {
                 configuration.background?.strokeColor = backgroundStrokeColor.withOverlayAlpha(overlayAlpha)
             }
+        }
+        
+        if state != .normal && configuration.background?.shadowColor != nil {
+            configuration.background?.shadowColor = nil
         }
     }
 }
@@ -386,21 +390,20 @@ open class ConfigurationBasedButton: UIControl {
     // MARK: - Layout
     
     // Determine the actual layout parameters based on configuration.
-    // Subclass can override the following getters to determine the layout.
         
-    open var shouldDisplayBackground: Bool {
+    private var shouldDisplayBackground: Bool {
         effectiveConfiguration.background != nil
     }
     
-    open var shouldDisplayImage: Bool {
+    private var shouldDisplayImage: Bool {
         effectiveConfiguration.showsActivityIndicator ? false : effectiveConfiguration.image != nil
     }
     
-    open var shouldDisplayActivityIndicator: Bool {
+    private var shouldDisplayActivityIndicator: Bool {
         effectiveConfiguration.showsActivityIndicator
     }
     
-    open var shouldDisplayTitle: Bool {
+    private var shouldDisplayTitle: Bool {
         if let attributedTitle = effectiveConfiguration.attributedTitle {
             return attributedTitle.length > 0
         }
@@ -409,7 +412,7 @@ open class ConfigurationBasedButton: UIControl {
         }
         return false
     }
-    open var shouldDisplaySubtitle: Bool {
+    private var shouldDisplaySubtitle: Bool {
         if let attributedSubtitle = effectiveConfiguration.attributedSubtitle, attributedSubtitle.length > 0 {
             return true
         }
@@ -419,7 +422,7 @@ open class ConfigurationBasedButton: UIControl {
         return false
     }
     
-    open var effectiveImagePlacement: ButtonConfiguration.ImagePlacement {
+    private var effectiveImagePlacement: ButtonConfiguration.ImagePlacement {
         switch effectiveConfiguration.imagePlacement {
         case .leading:
             return layoutDirectionIsRTL ? .right : .left
@@ -430,7 +433,7 @@ open class ConfigurationBasedButton: UIControl {
         }
     }
     
-    open var effectiveTitleAlignment: ButtonConfiguration.TitleAlignment {
+    private var effectiveTitleAlignment: ButtonConfiguration.TitleAlignment {
         switch effectiveConfiguration.titleAlignment {
         case .leading:
             return layoutDirectionIsRTL ? .right : .left
@@ -458,7 +461,7 @@ open class ConfigurationBasedButton: UIControl {
         }
     }
     
-    open var effectiveContentInsets: UIEdgeInsets {
+    private var effectiveContentInsets: UIEdgeInsets {
         switch effectiveConfiguration.contentInsets {
         case .directional(let insets):
             return UIEdgeInsets(top: insets.top, left: layoutDirectionIsRTL ? insets.trailing : insets.leading, bottom: insets.bottom, right: layoutDirectionIsRTL ? insets.leading : insets.trailing)
@@ -467,7 +470,7 @@ open class ConfigurationBasedButton: UIControl {
         }
     }
     
-    open var layoutDirectionIsRTL: Bool {
+    private var layoutDirectionIsRTL: Bool {
         effectiveUserInterfaceLayoutDirection == .rightToLeft
     }
     
@@ -1006,7 +1009,7 @@ open class ConfigurationBasedButton: UIControl {
             subtitleLabel.frame = subtitleFrame
         }
         
-        validFitSize = nil
+        bestSize = nil
         invalidateIntrinsicContentSize()
     }
     
@@ -1079,7 +1082,7 @@ open class ConfigurationBasedButton: UIControl {
         }
     }
     
-    private var validFitSize: CGSize?
+    private var bestSize: CGSize?
     private var isFittingSize: Bool = false
     
     open override func updateConstraints() {
@@ -1110,8 +1113,8 @@ open class ConfigurationBasedButton: UIControl {
         }
         
         // return cached size
-        if let validFitSize = validFitSize, limitSize == CGSize.max {
-            return validFitSize
+        if let bestSize = bestSize, limitSize == CGSize.max {
+            return bestSize
         }
         
         var resultSize = CGSize.zero
@@ -1188,7 +1191,7 @@ open class ConfigurationBasedButton: UIControl {
         }
         
         if limitSize == CGSize.max {
-            validFitSize = resultSize
+            bestSize = resultSize
         }
         
         return resultSize

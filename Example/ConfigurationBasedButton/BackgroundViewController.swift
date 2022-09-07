@@ -60,6 +60,9 @@ public class BackgroundViewController: UIViewController {
         bgConfig.image = image
         bgConfig.visualEffect = visualEffect
         bgConfig.imageContentMode = .scaleAspectFit
+        bgConfig.shadowColor = UIColor.black.withAlphaComponent(0.35)
+        bgConfig.shadowBlurRadius = 10
+        
 
         backgroundView.backgroundColor = .clear
         backgroundView.configuration = bgConfig
