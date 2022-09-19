@@ -63,9 +63,12 @@ public class BackgroundViewController: UIViewController {
         bgConfig.shadowColor = UIColor.black.withAlphaComponent(0.35)
         bgConfig.shadowBlurRadius = 10
         
-
         backgroundView.backgroundColor = .clear
         backgroundView.configuration = bgConfig
+        
+        
+        button.configuration?.background.backgroundInsets = NSDirectionalEdgeInsets(top: 10, leading: 10, bottom: 10, trailing: 10)
+        button.configuration?.background.edgesAddingLayoutMarginsToBackgroundInsets = [.all]
         
     }
     

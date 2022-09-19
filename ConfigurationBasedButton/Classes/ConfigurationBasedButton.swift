@@ -163,7 +163,7 @@ open class PlainButtonConfigurationProvider: ButtonConfigurationProviderType {
     }
 
     /// Subclasses can override this function to return the extra transparency in different states.
-    open func overlayAlpha(for state: State) -> CGFloat? {
+    open func multiplicativeAlpha(for state: State) -> CGFloat? {
         switch state {
         case .normal:
             return nil
@@ -176,25 +176,25 @@ open class PlainButtonConfigurationProvider: ButtonConfigurationProviderType {
     
     open func update(_ configuration: inout ButtonConfiguration, for button: ConfigurationBasedButton) {
         let state = State.state(from: button)
-        if let overlayAlpha = overlayAlpha(for: state) {
+        if let overlayAlpha = multiplicativeAlpha(for: state) {
             if let forgroundColor = configuration.foregroundColor ?? button.tintColor {
-                configuration.foregroundColor = forgroundColor.withOverlayAlpha(overlayAlpha)
+                configuration.foregroundColor = forgroundColor.withMultiplicativeAlpha(overlayAlpha)
             }
             
             if let titleColor = configuration.titleColor {
-                configuration.titleColor = titleColor.withOverlayAlpha(overlayAlpha)
+                configuration.titleColor = titleColor.withMultiplicativeAlpha(overlayAlpha)
             }
             
             if let subtitleColor = configuration.subtitleColor {
-                configuration.subtitleColor = subtitleColor.withOverlayAlpha(overlayAlpha)
+                configuration.subtitleColor = subtitleColor.withMultiplicativeAlpha(overlayAlpha)
             }
             
             if let backgroundFillColor = configuration.background?.fillColor {
-                configuration.background?.fillColor = backgroundFillColor.withOverlayAlpha(overlayAlpha)
+                configuration.background?.fillColor = backgroundFillColor.withMultiplicativeAlpha(overlayAlpha)
             }
             
             if let backgroundStrokeColor = configuration.background?.strokeColor {
-                configuration.background?.strokeColor = backgroundStrokeColor.withOverlayAlpha(overlayAlpha)
+                configuration.background?.strokeColor = backgroundStrokeColor.withMultiplicativeAlpha(overlayAlpha)
             }
         }
         
@@ -1338,7 +1338,7 @@ private extension CGSize {
 }
 
 private extension UIColor {
-    func withOverlayAlpha(_ alpha: CGFloat) -> UIColor {
+    func withMultiplicativeAlpha(_ alpha: CGFloat) -> UIColor {
         var originalAlpha: CGFloat = 0
         if !self.getRed(nil, green: nil, blue: nil, alpha: &originalAlpha) {
             originalAlpha = 0

@@ -23,6 +23,8 @@ public struct BackgroundConfiguration {
     public var strokeOutset: CGFloat = 0
     /// The corner style for the background and stroke. This is also applied to the custom view. Default is .fixed(0).
     public var cornerStyle: CornerStyle?
+    /// Defines which of the four corners receives the masking when using cornerStyle
+    public var stylishCorners: UIRectCorner = .allCorners
     /// The visual effect to apply to the background. Default is nil.
     public var visualEffect: UIVisualEffect?
     /// A custom view for the background.
@@ -199,9 +201,11 @@ public class BackgroundView: UIView {
             }
         }
         
+        let maskedCorner = configuration.stylishCorners.maskedCorners
+        
         if shouldDisplayShadowView {
             shadowView.frame = bounds
-            shadowView.layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: cornerRadius).cgPath
+            shadowView.layer.shadowPath = UIBezierPath(roundedRect: bounds, byRoundingCorners: configuration.stylishCorners, cornerRadii: CGSize(width: cornerRadius, height: cornerRadius)).cgPath
             
             if !shadowView.isDescendant(of: self) {
                 addSubview(shadowView)
@@ -215,6 +219,7 @@ public class BackgroundView: UIView {
         if shouldDisplayColorView {
             colorView.frame = bounds
             colorView.layer.cornerRadius = cornerRadius
+            colorView.layer.maskedCorners = maskedCorner
             
             if !colorView.isDescendant(of: self) {
                 addSubview(colorView)
@@ -228,7 +233,10 @@ public class BackgroundView: UIView {
         
         if shouldDisplayVisualEffectView {
             visualEffectView.frame = bounds
-            visualEffectView.subviews.forEach { $0.layer.cornerRadius = cornerRadius }
+            visualEffectView.subviews.forEach {
+                $0.layer.cornerRadius = cornerRadius
+                $0.layer.maskedCorners = maskedCorner
+            }
             
             if !visualEffectView.isDescendant(of: self) {
                 addSubview(visualEffectView)
@@ -243,6 +251,7 @@ public class BackgroundView: UIView {
         if shouldDisplayImageView {
             imageView.frame = bounds
             imageView.layer.cornerRadius = cornerRadius
+            imageView.layer.maskedCorners = maskedCorner
             
             if !imageView.isDescendant(of: self) {
                 addSubview(imageView)
@@ -257,6 +266,7 @@ public class BackgroundView: UIView {
         if shouldDisplayCustomView {
             customView?.frame = bounds
             customView?.layer.cornerRadius = cornerRadius
+            customView?.layer.maskedCorners = maskedCorner
             
             if let customView = customView {
                 if !customView.isDescendant(of: self) {
@@ -274,6 +284,7 @@ public class BackgroundView: UIView {
             strokeView.frame = bounds.inset(by: UIEdgeInsets(top: -outset, left: -outset, bottom: -outset, right: -outset))
             if cornerRadius > 0 {
                 strokeView.layer.cornerRadius = cornerRadius + outset
+                strokeView.layer.maskedCorners = maskedCorner
             }
             
             if !strokeView.isDescendant(of: self) {
@@ -295,4 +306,24 @@ public class BackgroundView: UIView {
         }
     }
     
+}
+
+
+extension UIRectCorner {
+    var maskedCorners: CACornerMask {
+        var corners: CACornerMask = []
+        if self.contains(.topLeft) {
+            corners.insert(.layerMinXMinYCorner)
+        }
+        if self.contains(.topRight) {
+            corners.insert(.layerMaxXMinYCorner)
+        }
+        if self.contains(.bottomLeft) {
+            corners.insert(.layerMinXMaxYCorner)
+        }
+        if self.contains(.bottomRight) {
+            corners.insert(.layerMaxXMaxYCorner)
+        }
+        return corners
+    }
 }

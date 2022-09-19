@@ -130,7 +130,16 @@ class ConfigurationBasedButtonViewController: UIViewController {
         systemButtonConfiguration.contentInsets = NSDirectionalEdgeInsets.zero
         systemButton.configuration = systemButtonConfiguration
         
-        button.baseConfiguration.foregroundColor = UIColor.white
+//        button.baseConfiguration.foregroundColor = UIColor.white
+        
+        button.preferredMaxLayoutWidthProvider = { [weak self] in
+            guard let self = self else { return 0 }
+            if self.buttonWidthConstraint.isActive {
+                return self.buttonWidthConstraint.constant
+            } else {
+                return CGFloat.greatestFiniteMagnitude
+            }
+        }
          
 //      button.configurationProvider = MyStyleButtonConfigurationProvider(style: .primaryOutline)
         
