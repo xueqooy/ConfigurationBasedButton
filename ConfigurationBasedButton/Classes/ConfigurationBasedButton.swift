@@ -258,42 +258,54 @@ open class ConfigurationBasedButton: UIControl {
     
     // MARK: - Update
     
+    private var hasUpdatedOnce = false
+    
     // The configuration that represent the current UI state of the button.
     open private(set) var effectiveConfiguration: ButtonConfiguration {
         didSet {
-            guard effectiveConfiguration != oldValue else {
+            if effectiveConfiguration == oldValue && hasUpdatedOnce {
                 return
             }
             
-            if effectiveConfiguration.image != oldValue.image ||
-                effectiveConfiguration.title != oldValue.title ||
-                effectiveConfiguration.titleFont != oldValue.titleFont ||
-                effectiveConfiguration.attributedTitle != oldValue.attributedTitle ||
-                effectiveConfiguration.subtitle != oldValue.subtitle ||
-                effectiveConfiguration.subtitleFont != oldValue.subtitleFont ||
-                effectiveConfiguration.attributedSubtitle != oldValue.attributedSubtitle ||
-                effectiveConfiguration.showsActivityIndicator != oldValue.showsActivityIndicator ||
-                effectiveConfiguration.contentInsets != oldValue.contentInsets ||
-                effectiveConfiguration.imagePlacement != oldValue.imagePlacement ||
-                effectiveConfiguration.titleAlignment != oldValue.titleAlignment ||
-                effectiveConfiguration.contentInsets != oldValue.contentInsets ||
-                effectiveConfiguration.imagePadding != oldValue.imagePadding ||
-                effectiveConfiguration.titlePadding != oldValue.titlePadding {
-                
+            if !hasUpdatedOnce {
                 updateForeground()
-                layoutForeground()
-            }
-            
-            if effectiveConfiguration.background != oldValue.background {
                 updateBackground()
+                layoutForeground()
                 layoutBackground()
+                updateForegroundColors()
+            } else {
+                if effectiveConfiguration.image != oldValue.image ||
+                    effectiveConfiguration.title != oldValue.title ||
+                    effectiveConfiguration.titleFont != oldValue.titleFont ||
+                    effectiveConfiguration.attributedTitle != oldValue.attributedTitle ||
+                    effectiveConfiguration.subtitle != oldValue.subtitle ||
+                    effectiveConfiguration.subtitleFont != oldValue.subtitleFont ||
+                    effectiveConfiguration.attributedSubtitle != oldValue.attributedSubtitle ||
+                    effectiveConfiguration.showsActivityIndicator != oldValue.showsActivityIndicator ||
+                    effectiveConfiguration.contentInsets != oldValue.contentInsets ||
+                    effectiveConfiguration.imagePlacement != oldValue.imagePlacement ||
+                    effectiveConfiguration.titleAlignment != oldValue.titleAlignment ||
+                    effectiveConfiguration.contentInsets != oldValue.contentInsets ||
+                    effectiveConfiguration.imagePadding != oldValue.imagePadding ||
+                    effectiveConfiguration.titlePadding != oldValue.titlePadding {
+                    
+                    updateForeground()
+                    layoutForeground()
+                }
+                
+                if effectiveConfiguration.background != oldValue.background {
+                    updateBackground()
+                    layoutBackground()
+                }
+                
+                if effectiveConfiguration.foregroundColor != oldValue.foregroundColor ||
+                    effectiveConfiguration.titleColor != oldValue.titleColor ||
+                    effectiveConfiguration.subtitleColor != oldValue.subtitleColor {
+                    updateForegroundColors()
+                }
             }
             
-            if effectiveConfiguration.foregroundColor != oldValue.foregroundColor ||
-                effectiveConfiguration.titleColor != oldValue.titleColor ||
-                effectiveConfiguration.subtitleColor != oldValue.subtitleColor {
-                updateForegroundColors()
-            }
+            hasUpdatedOnce = true
         }
     }
     
