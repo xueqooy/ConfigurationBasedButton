@@ -205,3 +205,7 @@ class MyStyleButtonConfigurationProvider: PlainButtonConfigurationProvider {
 }
 
 ```
+
+## Note
+
+This repository does not provide any installation methods like CocoaPods or Swift Package Manager. You are free to copy the codebase and make any custom modifications as per your requirements.
